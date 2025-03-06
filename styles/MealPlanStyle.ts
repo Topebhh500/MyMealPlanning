@@ -34,16 +34,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
-    minWidth: 80,
+    minWidth: 70,
     alignItems: "center",
+    justifyContent: "center",
   },
   selectedDay: {
     backgroundColor: "#6200ea",
   },
   dayText: {
-    color: "#333",
     fontSize: 14,
     fontWeight: "500",
+    color: "#333",
+    marginBottom: 4,
+  },
+  dateText: {
+    fontSize: 14,
+    color: "#333",
   },
   selectedDayText: {
     color: "#fff",
@@ -52,6 +58,7 @@ const styles = StyleSheet.create({
   // Meal Cards
   mealCard: {
     marginBottom: 16,
+    padding: 10,
     borderRadius: 12,
     elevation: 3,
     backgroundColor: "#fff",
@@ -75,6 +82,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     color: "#6200ea",
+    marginTop: 16,
+    marginBottom: 8,
   },
   calorieContainer: {
     flexDirection: "row",
@@ -87,6 +96,11 @@ const styles = StyleSheet.create({
   },
   warningText: {
     color: "#ff9800",
+  },
+  mealInfoContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
 
   // Meal Images
@@ -110,9 +124,9 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   mealName: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#6200ea",
     marginBottom: 8,
   },
   cookingTime: {
@@ -127,6 +141,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginTop: 8,
+    marginBottom: 16,
   },
   nutritionItem: {
     alignItems: "center",
@@ -144,6 +159,13 @@ const styles = StyleSheet.create({
   },
 
   // Buttons and Actions
+  generateSingleButton: {
+    marginVertical: 16,
+    backgroundColor: "#ccc",
+    paddingVertical: 8,
+    elevation: 2,
+    borderRadius: 8,
+  },
   generateButton: {
     marginVertical: 16,
     backgroundColor: "#6200ea",
@@ -152,20 +174,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   viewIngredientsButton: {
+    marginVertical: 12,
+    borderRadius: 4,
     backgroundColor: "#6200ea",
-    marginHorizontal: 4,
-  },
-  buttonCard: {
-    padding: 0, // Adjust the padding value as needed
-    marginLeft: -1,
-    marginRight: -1,
-    borderColor: "#6200ea",
   },
   buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 8,
-    marginTop: 8,
+    flexDirection: "column",
+    marginTop: 16,
+    marginBottom: 24,
   },
 
   // Modals
@@ -241,19 +257,22 @@ const styles = StyleSheet.create({
 
   // Ingredients List
   ingredientsList: {
-    paddingTop: 8,
+    paddingTop: 4,
     maxHeight: 400,
   },
   ingredientItem: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
   },
   ingredientTitle: {
     fontSize: 16,
     color: "#333",
+    flex: 1,
   },
 
   // Empty States
@@ -293,7 +312,7 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    marginHorizontal: 4,
+    marginHorizontal: 2,
   },
   modalCancelButton: {
     backgroundColor: "#f5f5f5",
@@ -307,6 +326,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 16,
   },
   daysInput: {
     width: 70,
@@ -320,98 +340,101 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  // Error States
-  errorText: {
-    color: "#f44336",
-    fontSize: 14,
-    marginTop: 4,
+  // Prep Instructions
+  prepInstructionsContainer: {
+    maxHeight: 400,
+    marginVertical: 10,
   },
-
-  // Success States
-  successText: {
-    color: "#4caf50",
-    fontSize: 14,
-    marginTop: 4,
-  },
-
-  // Responsive Design Adjustments
-  tabletContainer: {
-    paddingHorizontal: 24,
-  },
-  tabletMealCard: {
-    marginHorizontal: 24,
-  },
-  landscapeDaysContainer: {
-    marginBottom: 24,
-  },
-
-  // Accessibility
-  accessibilityText: {
-    fontSize: 18,
-  },
-  highContrastText: {
-    color: "#000",
-  },
-  modalSubtitle: {
+  prepTimeText: {
     fontSize: 16,
-    color: "#666",
-    marginBottom: 16,
-    textAlign: "center",
+    fontWeight: "bold",
+    marginBottom: 15,
   },
-  ingredientActions: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  dateButton: {
-    marginVertical: 8,
+  instructionText: {
+    fontSize: 14,
+    marginBottom: 8,
+    lineHeight: 20,
   },
   closeButton: {
     marginTop: 16,
     backgroundColor: "#6200ea",
   },
 
-  // Add to your existing styles
-  themeToggleButton: {
-    marginHorizontal: 20,
-    marginVertical: 10,
+  //Daily meal plan
+  dailyPlanContainer: {
+    width: 320,
+    padding: 16,
+    marginRight: 12,
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
-
-  templateContainer: {
-    padding: 20,
+  selectedDateContainer: {
+    borderColor: "#6200ea",
+    borderWidth: 2,
   },
-
-  templateButton: {
-    marginBottom: 10,
-  },
-
-  prepInstructionsContainer: {
-    maxHeight: 400,
-    marginVertical: 10,
-  },
-
-  prepTimeText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 15,
-  },
-
-  sectionTitle: {
+  dateHeader: {
     fontSize: 18,
-    marginTop: 15,
-    marginBottom: 10,
+    fontWeight: "bold",
+    marginBottom: 16,
+    color: "#6200ea",
   },
 
-  instructionText: {
-    fontSize: 14,
+  // Meal sections
+  mealSection: {
+    marginBottom: 16,
+  },
+  mealTypeHeader: {
+    fontSize: 16,
+    fontWeight: "600",
     marginBottom: 8,
-    lineHeight: 20,
+    color: "#333",
   },
-
-  tipText: {
-    fontSize: 14,
-    marginBottom: 5,
-    fontStyle: "italic",
+  actionButtonsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
-} as const);
+  halfButton: {
+    flex: 0.48,
+    borderColor: "#6200ea",
+  },
+  deleteButton: {
+    backgroundColor: "#FF0000",
+    color: "#FFFFFF !important",
+  },
+  instructionsLink: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  instructionsText: {
+    color: "#6200ea",
+    textDecorationLine: "underline",
+  },
+  // Add to your styles
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  closeIcon: {
+    margin: 0,
+    padding: 0,
+  },
+  fullWidthButton: {
+    marginTop: 16,
+    backgroundColor: "#6200ea",
+    width: "100%",
+    borderRadius: 8,
+  },
+  addButton: {
+    margin: 0,
+  },
+});
 
 export default styles;

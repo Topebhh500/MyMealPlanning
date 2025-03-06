@@ -4,38 +4,42 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
+    padding: 16,
   },
   profileHeader: {
-    backgroundColor: "#6200ea",
-    padding: 20,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 10,
     alignItems: "center",
-    elevation: 4,
+    elevation: 2,
   },
   avatarContainer: {
     alignItems: "center",
-    marginVertical: 20,
   },
   avatar: {
-    borderWidth: 4,
-    borderColor: "#fff",
-    elevation: 8,
+    marginBottom: 16,
+    backgroundColor: "#e0e0e0",
   },
   uploadButton: {
-    marginTop: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    borderColor: "#6200ea",
+    borderWidth: 1,
   },
   section: {
-    margin: 16,
+    marginBottom: 16,
     padding: 16,
-    borderRadius: 8,
-    backgroundColor: "#fff",
+    borderRadius: 10,
     elevation: 2,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "bold",
-    color: "#6200ea",
     marginBottom: 16,
+    color: "#6200ea",
+  },
+  sectionDescription: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 12,
   },
   input: {
     marginBottom: 16,
@@ -44,7 +48,7 @@ const styles = StyleSheet.create({
   chipsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginHorizontal: -4,
+    marginVertical: 8,
   },
   chip: {
     margin: 4,
@@ -55,8 +59,8 @@ const styles = StyleSheet.create({
   },
   settingContainer: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
   },
   settingTextContainer: {
     flex: 1,
@@ -64,85 +68,189 @@ const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
   },
   settingDescription: {
     fontSize: 14,
     color: "#666",
-    marginTop: 4,
   },
   buttonContainer: {
-    padding: 16,
-    marginBottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 24,
   },
   saveButton: {
-    marginBottom: 12,
+    flex: 1,
+    marginRight: 8,
     backgroundColor: "#6200ea",
-    padding: 8,
   },
   logoutButton: {
+    flex: 1,
+    marginLeft: 8,
     backgroundColor: "#f44336",
-    padding: 8,
   },
   snackbar: {
-    backgroundColor: "#323232",
+    backgroundColor: "#4caf50",
+  },
+  errorSnackbar: {
+    backgroundColor: "#f44336",
   },
 
-  templateButton: {
-    marginTop: 10,
+  // API Status styles
+  apiStatusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingVertical: 8,
+  },
+  apiStatusLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginRight: 12,
+  },
+  apiStatusIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  statusDotValid: {
+    backgroundColor: "#4caf50",
+  },
+  statusDotInvalid: {
+    backgroundColor: "#f44336",
+  },
+  statusDotUnknown: {
+    backgroundColor: "#ffc107",
+  },
+  apiStatusText: {
+    fontSize: 14,
+    fontWeight: "500",
   },
 
-  modalContainer: {
-    margin: 20,
+  // API Limit styles
+  apiLimitContainer: {
+    marginBottom: 16,
+  },
+  apiLimitLabel: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 4,
+  },
+  apiLimitValue: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  apiLimitProgress: {
+    height: 6,
+    borderRadius: 3,
   },
 
-  modalContent: {
-    padding: 20,
-    borderRadius: 10,
-    backgroundColor: "white",
+  // Complexity options
+  complexityOption: {
+    marginBottom: 8,
+    borderRadius: 8,
+    backgroundColor: "#f9f9f9",
+  },
+  complexityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+  },
+  complexityTextContainer: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  complexityLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  complexityDescription: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
   },
 
-  modalTitle: {
-    marginBottom: 15,
-  },
-
+  // Template styles
   templatesList: {
     maxHeight: 300,
   },
-
   templateItem: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
-    marginBottom: 10,
-    borderRadius: 5,
-    elevation: 2,
+    justifyContent: "space-between",
+    padding: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+    elevation: 1,
   },
-
   templateInfo: {
     flex: 1,
   },
-
   templateName: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
-
   templateDate: {
     fontSize: 12,
     color: "#666",
+    marginTop: 4,
   },
-
+  templateActions: {
+    flexDirection: "row",
+  },
   emptyText: {
     textAlign: "center",
+    padding: 20,
     color: "#666",
-    marginTop: 20,
   },
 
+  // Modal styles
+  modalContainer: {
+    backgroundColor: "white",
+    margin: 20,
+    borderRadius: 10,
+    padding: 20,
+    maxHeight: "80%",
+  },
+  modalContent: {
+    flex: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 16,
+    color: "#6200ea",
+  },
+  modalDescription: {
+    textAlign: "center",
+    marginBottom: 20,
+    color: "#666",
+  },
+  modalButtonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 16,
+  },
+  modalButton: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
   closeButton: {
-    marginTop: 15,
+    marginTop: 16,
     backgroundColor: "#6200ea",
   },
-} as const);
+
+  // Action buttons
+  actionButton: {
+    marginVertical: 8,
+    borderColor: "#6200ea",
+  },
+});
 
 export default styles;
