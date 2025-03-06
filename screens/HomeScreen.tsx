@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -19,6 +19,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { auth, firestore } from "../api/firebase";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useFocusEffect } from "@react-navigation/native"; // Add this import
 import styles from "../styles/HomeStyle";
 
 // Define the navigation type
@@ -95,10 +96,27 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   });
   const [loading, setLoading] = useState<boolean>(true);
 
-  useEffect(() => {
-    void loadUserData();
-    void loadTodaysSummary();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      const loadData = async () => {
+        try {
+          await Promise.all([loadUserData(), loadTodaysSummary()]);
+        } catch (error) {
+          console.error("Error loading data:", error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      void loadData();
+
+      // Return function will be called when screen loses focus
+      return () => {
+        // Clean up if needed
+      };
+    }, [])
+  );
 
   const loadUserData = async (): Promise<void> => {
     try {
@@ -286,7 +304,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             style={styles.avatar}
           />
           <View style={styles.headerText}>
-            <Text style={styles.welcomeText}>Tervetuloa!</Text>
+            <Text style={styles.welcomeText}>Welcome!</Text>
             <Title style={styles.title}>{userName}!</Title>
           </View>
         </View>
