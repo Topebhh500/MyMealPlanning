@@ -6,283 +6,43 @@ import {
   Button,
   Modal,
   Portal,
-  List,
+  Text,
+  TextInput,
   IconButton,
   Checkbox,
-  TextInput,
-  RadioButton,
   ActivityIndicator,
-  Text,
 } from "react-native-paper";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { searchRecipes } from "../api/edamam";
 import { auth, firestore } from "../api/firebase";
 import styles from "../styles/MealPlanStyle";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-//import AsyncStorage from "node_modules/@react-native-async-storage/async-storage/lib/typescript";
 
-// Define interfaces for the data structures
-interface UserPreferences {
-  calorieGoal: number;
-  allergies: string[];
-  dietaryPreferences: string[];
-}
+// Import components
+import MealCard from "../components/MealCard";
+import PasteMealModal from "../components/PasteMealModal";
 
-interface Meal {
-  name: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  image: string | null;
-  ingredients: string[];
-  url: string;
-  source: string;
-  totalTime: number;
-  foodCategory: string;
-}
+// Import services
+import {
+  getRandomMeal,
+  saveMealPlan,
+  createMealPlanTemplate,
+  generateShoppingListFromMealPlan,
+} from "../services/MealService";
 
-interface MealPlan {
-  [date: string]: {
-    breakfast?: Meal;
-    lunch?: Meal;
-    dinner?: Meal;
-  };
-}
+// Import utilities
+import {
+  getFormattedDate,
+  generateDateRange,
+  formatReadableDate,
+} from "../utils/DateUtils";
 
-interface MealPlanTemplate {
-  id: string;
-  name: string;
-  meals: MealPlan;
-  createdAt: Date;
-}
-
-interface MealPrepInstructions {
-  mealId: string;
-  instructions: string[];
-  prepTime: number;
-  cookingTips: string[];
-}
-
-interface ShoppingListItem {
-  name: string;
-  checked: boolean;
-}
-
-interface StockItem {
-  name: string;
-}
-
-const getMealQueries = (preferences: string[]) => {
-  const queryBank = {
-    breakfast: {
-      default: [
-        "breakfast",
-        "morning meal",
-        "breakfast bowl",
-        "breakfast sandwich",
-        "breakfast recipes",
-        "eggs",
-        "pancakes",
-        "waffles",
-        "bacon eggs",
-        "breakfast burrito",
-      ],
-      vegan: [
-        "vegan breakfast",
-        "plant based breakfast",
-        "breakfast smoothie",
-        "oatmeal breakfast",
-        "avocado toast",
-        "vegan pancakes",
-        "chia pudding",
-        "granola bowl",
-        "fruit breakfast",
-        "breakfast quinoa",
-      ],
-      vegetarian: [
-        "vegetarian breakfast",
-        "egg breakfast",
-        "yogurt breakfast",
-        "cheese breakfast",
-        "vegetarian omelette",
-        "breakfast muffins",
-        "french toast",
-        "breakfast parfait",
-        "cottage cheese breakfast",
-        "vegetable frittata",
-      ],
-      "low-carb": [
-        "keto breakfast",
-        "low carb breakfast",
-        "protein breakfast",
-        "egg bowl",
-        "breakfast protein",
-        "keto eggs",
-        "low carb omelette",
-        "breakfast salad",
-        "keto pancakes",
-        "breakfast without bread",
-      ],
-      "high-protein": [
-        "protein breakfast",
-        "high protein morning",
-        "protein bowl",
-        "protein oatmeal",
-        "protein pancakes",
-        "egg white omelette",
-        "protein smoothie bowl",
-        "greek yogurt breakfast",
-        "protein french toast",
-        "cottage cheese protein bowl",
-      ],
-    },
-    lunch: {
-      default: [
-        "lunch",
-        "sandwich",
-        "salad",
-        "soup",
-        "wrap",
-        "bowl",
-        "pasta lunch",
-        "rice bowl",
-        "noodles",
-        "lunch plate",
-      ],
-      vegan: [
-        "vegan lunch",
-        "buddha bowl",
-        "vegan salad",
-        "plant based lunch",
-        "quinoa bowl",
-        "vegan wrap",
-        "chickpea lunch",
-        "lentil bowl",
-        "vegan soup",
-        "vegetable stir fry",
-      ],
-      vegetarian: [
-        "vegetarian lunch",
-        "veggie sandwich",
-        "vegetable soup",
-        "mediterranean bowl",
-        "vegetarian wrap",
-        "falafel plate",
-        "vegetable curry",
-        "bean bowl",
-        "tofu lunch",
-        "vegetarian pasta",
-      ],
-      "low-carb": [
-        "keto lunch",
-        "low carb meal",
-        "protein salad",
-        "lettuce wrap",
-        "zucchini noodles",
-        "cauliflower rice bowl",
-        "keto bowl",
-        "protein plate",
-        "low carb soup",
-        "vegetable stir fry no rice",
-      ],
-      "high-protein": [
-        "high protein lunch",
-        "chicken salad",
-        "tuna bowl",
-        "protein plate",
-        "quinoa protein bowl",
-        "turkey wrap",
-        "protein pasta",
-        "salmon lunch",
-        "lean protein bowl",
-        "egg lunch",
-      ],
-    },
-    dinner: {
-      default: [
-        "dinner",
-        "chicken dinner",
-        "fish dinner",
-        "beef dinner",
-        "pork dinner",
-        "pasta dinner",
-        "rice dinner",
-        "stir fry",
-        "roasted dinner",
-        "grilled dinner",
-      ],
-      vegan: [
-        "vegan dinner",
-        "plant based dinner",
-        "vegan curry",
-        "tofu dinner",
-        "tempeh dinner",
-        "vegan pasta",
-        "vegetable dinner",
-        "vegan stir fry",
-        "vegan bowl",
-        "lentil dinner",
-      ],
-      vegetarian: [
-        "vegetarian dinner",
-        "veggie pasta",
-        "vegetable curry",
-        "vegetarian stir fry",
-        "bean dinner",
-        "vegetable lasagna",
-        "eggplant dinner",
-        "mushroom dinner",
-        "quinoa dinner",
-        "vegetarian casserole",
-      ],
-      "low-carb": [
-        "keto dinner",
-        "low carb dinner",
-        "protein dinner",
-        "zucchini pasta",
-        "cauliflower rice dinner",
-        "keto bowl",
-        "low carb stir fry",
-        "protein plate dinner",
-        "vegetable dinner no carb",
-        "grilled protein dinner",
-      ],
-      "high-protein": [
-        "high protein dinner",
-        "lean protein dinner",
-        "chicken breast dinner",
-        "fish protein dinner",
-        "protein bowl dinner",
-        "lean meat dinner",
-        "protein rich dinner",
-        "turkey dinner",
-        "seafood protein dinner",
-        "protein pasta dinner",
-      ],
-    },
-  };
-
-  // Determine the primary preference
-  let primaryPreference: keyof typeof queryBank.breakfast = "default";
-  if (preferences.includes("Vegan")) {
-    primaryPreference = "vegan";
-  } else if (preferences.includes("Vegetarian")) {
-    primaryPreference = "vegetarian";
-  } else if (preferences.includes("Low-Carb")) {
-    primaryPreference = "low-carb";
-  } else if (preferences.includes("High-Protein")) {
-    primaryPreference = "high-protein";
-  }
-
-  // Return meal-specific queries based on preference
-  return {
-    breakfast:
-      queryBank.breakfast[primaryPreference] || queryBank.breakfast.default,
-    lunch: queryBank.lunch[primaryPreference] || queryBank.lunch.default,
-    dinner: queryBank.dinner[primaryPreference] || queryBank.dinner.default,
-  };
-};
+// Import types
+import {
+  UserPreferences,
+  Meal,
+  MealPlan,
+  ShoppingListItem,
+  MealTimesState,
+} from "../types/MealTypes";
 
 const MealPlanScreen: React.FC = () => {
   // Core state
@@ -297,45 +57,42 @@ const MealPlanScreen: React.FC = () => {
   // Modal states
   const [isIngredientsModalVisible, setIsIngredientsModalVisible] =
     useState<boolean>(false);
-  const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
+  const [isGenerateModalVisible, setIsGenerateModalVisible] =
+    useState<boolean>(false);
+  const [showPrepInstructionsModal, setShowPrepInstructionsModal] =
+    useState<boolean>(false);
+  const [showSaveTemplateModal, setShowSaveTemplateModal] =
+    useState<boolean>(false);
+  const [templateName, setTemplateName] = useState<string>("");
+
+  // Copy/Paste meal states
+  const [copiedMeal, setCopiedMeal] = useState<Meal | null>(null);
+  const [copiedMealType, setCopiedMealType] = useState<string | null>(null);
   const [isPasteModalVisible, setIsPasteModalVisible] =
     useState<boolean>(false);
+  const [selectedPasteDate, setSelectedPasteDate] = useState<Date>(new Date());
+  const [selectedPasteMealTime, setSelectedPasteMealTime] =
+    useState<string>("");
 
   // Generation states
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
 
   // Meal configuration states
-  const [mealTimes, setMealTimes] = useState({
+  const [mealTimes, setMealTimes] = useState<MealTimesState>({
     breakfast: true,
     lunch: true,
     dinner: true,
   });
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [numberOfDays, setNumberOfDays] = useState<number>(7);
-  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
 
   // Shopping list and ingredients states
   const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
-  const [stock, setStock] = useState<StockItem[]>([]);
 
-  // Meal Template and Instructions
-  //const [savedTemplates, setSavedTemplates] = useState<MealPlanTemplate[]>([]);
-  const [mealPrepInstructions, setMealPrepInstructions] =
-    useState<MealPrepInstructions | null>(null);
-  //const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
-
-  const [showPrepInstructionsModal, setShowPrepInstructionsModal] =
-    useState<boolean>(false);
+  // Meal Instructions
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
-
-  // Copy/Paste meal states
-  const [copiedMeal, setCopiedMeal] = useState<Meal | null>(null);
-  const [copiedMealType, setCopiedMealType] = useState<string | null>(null);
-  const [selectedPasteDate, setSelectedPasteDate] = useState<Date>(new Date());
-  const [selectedPasteMealTime, setSelectedPasteMealTime] =
-    useState<string>("");
 
   useEffect(() => {
     loadInitialData();
@@ -347,44 +104,10 @@ const MealPlanScreen: React.FC = () => {
         loadUserPreferences(),
         loadMealPlan(),
         loadShoppingList(),
-        loadStock(),
       ]);
     } catch (error) {
       console.error("Error loading initial data:", error);
       Alert.alert("Error", "Failed to load some data. Please try again.");
-    }
-  };
-
-  // Meal Prep Instructions Functions
-  const addMealPrepInstructions = async (
-    meal: Meal,
-    instructions: string[],
-    prepTime: number,
-    cookingTips: string[]
-  ) => {
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        const mealPrepData: MealPrepInstructions = {
-          mealId: meal.name, // Using meal name as ID for simplicity
-          instructions,
-          prepTime,
-          cookingTips,
-        };
-
-        await firestore
-          .collection("mealPrepInstructions")
-          .doc(user.uid)
-          .collection("instructions")
-          .doc(mealPrepData.mealId)
-          .set(mealPrepData);
-
-        setMealPrepInstructions(mealPrepData);
-        Alert.alert("Success", "Meal prep instructions added!");
-      }
-    } catch (error) {
-      console.error("Error adding meal prep instructions:", error);
-      Alert.alert("Error", "Failed to add meal prep instructions");
     }
   };
 
@@ -417,6 +140,9 @@ const MealPlanScreen: React.FC = () => {
           const storedMealPlan = doc.data() as MealPlan;
           setMealPlan(storedMealPlan);
           setSelectedDate(getFormattedDate(new Date()));
+        } else {
+          // If no meal plan exists yet, set today as selected date
+          setSelectedDate(getFormattedDate(new Date()));
         }
       }
     } catch (error) {
@@ -443,292 +169,164 @@ const MealPlanScreen: React.FC = () => {
     }
   };
 
-  const loadStock = async () => {
+  // Generate a single meal for a specific date and meal type
+  const generateMeal = async (date: string, mealType: string) => {
     try {
-      const user = auth.currentUser;
-      if (user) {
-        const snapshot = await firestore
-          .collection("stocks")
-          .doc(user.uid)
-          .get();
-        if (snapshot.exists) {
-          setStock(snapshot.data()?.items || []);
-        }
+      setIsGenerating(true);
+      const newMeal = await getRandomMeal(mealType, userPreferences);
+
+      const updatedMealPlan = { ...mealPlan };
+      if (!updatedMealPlan[date]) {
+        updatedMealPlan[date] = {};
       }
+
+      updatedMealPlan[date][mealType] = newMeal;
+
+      await saveMealPlan(updatedMealPlan);
+      setMealPlan(updatedMealPlan);
     } catch (error) {
-      console.error("Error loading stock:", error);
-      throw error;
-    }
-  };
-
-  const getRandomMeal = async (mealType: string): Promise<Meal> => {
-    try {
-      const mealCalorieDistribution = {
-        breakfast: 0.3,
-        lunch: 0.35,
-        dinner: 0.35,
-      };
-
-      const targetCalories = Math.round(
-        userPreferences.calorieGoal * mealCalorieDistribution[mealType]
-      );
-
-      // Start with strict parameters
-      let queryParams = {
-        mealType: mealType.toLowerCase(),
-        calories: targetCalories,
-        health: [] as string[],
-        excluded: [] as string[],
-      };
-
-      // Add dietary preferences
-      if (userPreferences.dietaryPreferences) {
-        if (userPreferences.dietaryPreferences.includes("Vegetarian")) {
-          queryParams.health.push("vegetarian");
-        }
-        if (userPreferences.dietaryPreferences.includes("Vegan")) {
-          queryParams.health.push("vegan");
-        }
-        if (userPreferences.dietaryPreferences.includes("Low-Carb")) {
-          queryParams.diet = "low-carb";
-        }
-        if (userPreferences.dietaryPreferences.includes("High-Protein")) {
-          queryParams.diet = "high-protein";
-        }
-      }
-
-      // Add allergy restrictions
-      if (userPreferences.allergies) {
-        userPreferences.allergies.forEach((allergy) => {
-          queryParams.excluded.push(allergy.toLowerCase());
-        });
-      }
-
-      const queries = getMealQueries(userPreferences.dietaryPreferences || []);
-      const mealOptions = queries[mealType];
-      let recipes = [];
-      let attempts = 0;
-      const maxAttempts = 3;
-
-      // Try with different levels of restriction relaxation
-      while (recipes.length === 0 && attempts < maxAttempts) {
-        const randomQuery =
-          mealOptions[Math.floor(Math.random() * mealOptions.length)];
-
-        try {
-          // Modify parameters based on attempt number
-          switch (attempts) {
-            case 0:
-              // First attempt: Try with all restrictions
-              recipes = await searchRecipes(randomQuery, queryParams);
-              break;
-
-            case 1:
-              // Second attempt: Relax calorie restrictions
-              const relaxedParams = {
-                ...queryParams,
-                calories: targetCalories * 1.2, // Allow 20% more calories
-              };
-              recipes = await searchRecipes(randomQuery, relaxedParams);
-              break;
-
-            case 2:
-              // Third attempt: Use only essential restrictions (allergies and vegan/vegetarian)
-              const essentialParams = {
-                mealType: mealType.toLowerCase(),
-                excluded: queryParams.excluded,
-                health: queryParams.health.filter(
-                  (h) => h === "vegetarian" || h === "vegan"
-                ),
-              };
-              recipes = await searchRecipes(randomQuery, essentialParams);
-              break;
-          }
-
-          attempts++;
-        } catch (error) {
-          console.error(`Attempt ${attempts} failed:`, error);
-          attempts++;
-        }
-      }
-
-      if (!recipes || recipes.length === 0) {
-        throw new Error(
-          `Unable to find ${mealType} recipes matching your preferences. Try adjusting your dietary restrictions.`
-        );
-      }
-
-      const selectedRecipe =
-        recipes[Math.floor(Math.random() * recipes.length)].recipe;
-
-      //console.log(
-      //  "Full Recipe Object:",
-      //  JSON.stringify(selectedRecipe, null, 2)
-      //);
-
-      //console.log("Cuisine Type:", selectedRecipe.cuisineType);
-
-      return {
-        name: selectedRecipe.label || "Untitled Recipe",
-        calories: Math.round(selectedRecipe.calories || 0),
-        protein: Math.round(
-          selectedRecipe.totalNutrients?.PROCNT?.quantity || 0
-        ),
-        carbs: Math.round(selectedRecipe.totalNutrients?.CHOCDF?.quantity || 0),
-        fat: Math.round(selectedRecipe.totalNutrients?.FAT?.quantity || 0),
-        image: selectedRecipe.image || null,
-        ingredients: selectedRecipe.ingredientLines || [],
-        url: selectedRecipe.url || "",
-        source: selectedRecipe.source || "",
-        totalTime: selectedRecipe.totalTime || 0,
-        foodCategory: selectedRecipe.foodCategory || null,
-      };
-    } catch (error) {
-      console.error(`Error getting ${mealType} recipe:`, error);
-      throw new Error(
-        `Failed to get ${mealType} recipe. Please check your dietary preferences and try again.`
-      );
-    }
-  };
-
-  const handleGenerateMealPlan = async () => {
-    if (!userPreferences.calorieGoal) {
+      console.error(`Error generating ${mealType} for ${date}:`, error);
       Alert.alert(
-        "Missing Information",
-        "Please set your daily calorie goal in your profile before generating a meal plan."
+        "Error",
+        error instanceof Error ? error.message : "Failed to generate meal"
       );
-      return;
+    } finally {
+      setIsGenerating(false);
     }
+  };
 
-    setIsGenerating(true);
-    const progressInterval = simulateProgress();
-
+  // Generate the complete meal plan
+  const generateCompleteMealPlan = async () => {
     try {
+      setIsGenerating(true);
+      setLoadingProgress(0);
+
+      const dates = generateDateRange(startDate, numberOfDays);
+      const mealTypes = [];
+
+      if (mealTimes.breakfast) mealTypes.push("breakfast");
+      if (mealTimes.lunch) mealTypes.push("lunch");
+      if (mealTimes.dinner) mealTypes.push("dinner");
+
+      if (mealTypes.length === 0) {
+        Alert.alert(
+          "No Meals Selected",
+          "Please select at least one meal type to generate."
+        );
+        setIsGenerating(false);
+        return;
+      }
+
+      const totalMeals = dates.length * mealTypes.length;
+      let completedMeals = 0;
+
       const newMealPlan = { ...mealPlan };
-      let errorOccurred = false;
 
-      for (let i = 0; i < numberOfDays && !errorOccurred; i++) {
-        const currentDate = new Date(startDate);
-        currentDate.setDate(startDate.getDate() + i);
-        const dateString = getFormattedDate(currentDate);
-
-        if (!newMealPlan[dateString]) {
-          newMealPlan[dateString] = {};
+      for (const date of dates) {
+        if (!newMealPlan[date]) {
+          newMealPlan[date] = {};
         }
 
-        try {
-          if (mealTimes.breakfast) {
-            newMealPlan[dateString].breakfast = await getRandomMeal(
-              "breakfast"
-            );
+        for (const mealType of mealTypes) {
+          try {
+            const newMeal = await getRandomMeal(mealType, userPreferences);
+            newMealPlan[date][mealType] = newMeal;
+
+            completedMeals++;
+            setLoadingProgress(Math.round((completedMeals / totalMeals) * 100));
+          } catch (error) {
+            console.error(`Error generating ${mealType} for ${date}:`, error);
           }
-          if (mealTimes.lunch) {
-            newMealPlan[dateString].lunch = await getRandomMeal("lunch");
-          }
-          if (mealTimes.dinner) {
-            newMealPlan[dateString].dinner = await getRandomMeal("dinner");
-          }
-        } catch (error) {
-          errorOccurred = true;
-          Alert.alert(
-            "Generation Error",
-            `Error generating meals for ${getDisplayDate(dateString)}: ${
-              error.message
-            }`
-          );
         }
       }
 
-      if (!errorOccurred) {
-        setMealPlan(newMealPlan);
-        await syncWithFirebase(newMealPlan);
-        Alert.alert("Success", "Meal plan generated successfully!");
-      }
+      await saveMealPlan(newMealPlan);
+      setMealPlan(newMealPlan);
+      setIsGenerateModalVisible(false);
+      Alert.alert("Success", "Meal plan generated successfully!");
     } catch (error) {
       console.error("Error generating meal plan:", error);
-      Alert.alert("Error", error.message);
+      Alert.alert("Error", "Failed to generate meal plan. Please try again.");
     } finally {
-      clearInterval(progressInterval);
-      setLoadingProgress(0);
       setIsGenerating(false);
-      setIsModalVisible(false);
+      setLoadingProgress(0);
     }
   };
 
-  // Utility Functions
-  const simulateProgress = () => {
-    setLoadingProgress(0);
-    const interval = setInterval(() => {
-      setLoadingProgress((prev) => {
-        if (prev >= 99) {
-          clearInterval(interval);
-          return 99;
-        }
-        return prev + Math.floor(Math.random() * 10) + 1;
-      });
-    }, 300);
-    return interval;
-  };
-
-  const syncWithFirebase = async (data: MealPlan) => {
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        await firestore.collection("mealPlans").doc(user.uid).set(data);
-      }
-    } catch (error) {
-      console.error("Error syncing with Firebase:", error);
-      throw new Error("Failed to save meal plan");
-    }
-  };
-
-  // Date Handling Functions
-  const getFormattedDate = (date: Date): string => {
-    const localDate = new Date(
-      date.getTime() - date.getTimezoneOffset() * 60000
+  const handleCopyMeal = (meal: Meal, mealType: string) => {
+    setCopiedMeal(meal);
+    setCopiedMealType(mealType);
+    Alert.alert(
+      "Success",
+      "Meal copied! Select a date and meal time to paste."
     );
-    return localDate.toISOString().split("T")[0];
+    setIsPasteModalVisible(true);
   };
 
-  const getDisplayDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return `${dayNames[date.getDay()]} ${date.getDate()}/${
-      date.getMonth() + 1
-    }`;
-  };
+  const handlePasteMeal = async () => {
+    try {
+      if (!copiedMeal || !copiedMealType) {
+        Alert.alert("Error", "No meal copied");
+        return;
+      }
 
-  const getDates = (): string[] => {
-    const dates: string[] = [];
-    const today = new Date();
-    for (let i = 0; i < 7; i++) {
-      const currentDate = new Date(today);
-      currentDate.setDate(today.getDate() + i);
-      dates.push(getFormattedDate(currentDate));
+      const dateString = getFormattedDate(selectedPasteDate);
+
+      const updatedMealPlan = { ...mealPlan };
+      if (!updatedMealPlan[dateString]) {
+        updatedMealPlan[dateString] = {};
+      }
+
+      updatedMealPlan[dateString][selectedPasteMealTime] = { ...copiedMeal };
+
+      await saveMealPlan(updatedMealPlan);
+      setMealPlan(updatedMealPlan);
+
+      setIsPasteModalVisible(false);
+      Alert.alert("Success", "Meal pasted successfully!");
+    } catch (error) {
+      console.error("Error pasting meal:", error);
+      Alert.alert("Error", "Failed to paste meal");
     }
-    return dates;
   };
 
-  // Shopping List Functions
-  const addToShoppingList = async (ingredient: string) => {
+  const handleAddSingleIngredient = async (ingredient: string) => {
     try {
       const user = auth.currentUser;
       if (user) {
-        if (shoppingList.some((item) => item.name === ingredient)) {
+        const newItem = { name: ingredient, checked: false };
+
+        // Get the latest shopping list data first
+        const snapshot = await firestore
+          .collection("shoppingLists")
+          .doc(user.uid)
+          .get();
+
+        let currentList: ShoppingListItem[] = [];
+        if (snapshot.exists) {
+          currentList = snapshot.data()?.items || [];
+        }
+
+        // Check if item already exists
+        if (currentList.some((item) => item.name === ingredient)) {
           Alert.alert(
-            "Already in List",
-            "This item is already in your shopping list"
+            "Info",
+            "This ingredient is already in your shopping list."
           );
           return;
         }
 
-        const newList = [...shoppingList, { name: ingredient, checked: false }];
+        // Add the new item
+        const updatedList = [...currentList, newItem];
+
         await firestore
           .collection("shoppingLists")
           .doc(user.uid)
-          .set({ items: newList });
-        setShoppingList(newList);
-        Alert.alert("Success", "Item added to shopping list");
+          .set({ items: updatedList });
+
+        // Update local state
+        setShoppingList(updatedList);
+        Alert.alert("Success", `Added "${ingredient}" to shopping list!`);
       }
     } catch (error) {
       console.error("Error adding to shopping list:", error);
@@ -736,465 +334,509 @@ const MealPlanScreen: React.FC = () => {
     }
   };
 
-  const removeFromShoppingList = async (ingredient: string) => {
+  const handleViewIngredients = (ingredients: string[]) => {
+    setSelectedIngredients(ingredients);
+    setIsIngredientsModalVisible(true);
+  };
+
+  const handleAddToShoppingList = async (ingredients: string[]) => {
     try {
       const user = auth.currentUser;
       if (user) {
-        const newList = shoppingList.filter((item) => item.name !== ingredient);
+        // Get the latest shopping list data first
+        const snapshot = await firestore
+          .collection("shoppingLists")
+          .doc(user.uid)
+          .get();
+
+        let currentList: ShoppingListItem[] = [];
+        if (snapshot.exists) {
+          currentList = snapshot.data()?.items || [];
+        }
+
+        // Prepare new items, avoiding duplicates
+        const newItems = ingredients
+          .filter(
+            (ingredient) =>
+              !currentList.some((item) => item.name === ingredient)
+          )
+          .map((name) => ({ name, checked: false }));
+
+        if (newItems.length === 0) {
+          Alert.alert(
+            "Info",
+            "All these ingredients are already in your shopping list."
+          );
+          return;
+        }
+
+        //Add the new items
+        const updatedList = [...currentList, ...newItems];
+
         await firestore
           .collection("shoppingLists")
           .doc(user.uid)
-          .set({ items: newList });
-        setShoppingList(newList);
+          .set({ items: updatedList });
+
+        // Update local state
+        setShoppingList(updatedList);
+        Alert.alert(
+          "Success",
+          `Added ${newItems.length} items to shopping list!`
+        );
       }
     } catch (error) {
-      console.error("Error removing from shopping list:", error);
-      Alert.alert("Error", "Failed to remove item from shopping list");
+      console.error("Error adding to shopping list:", error);
+      Alert.alert("Error", "Failed to add items to shopping list");
     }
   };
 
-  // Meal Copy/Paste Functions
-  const handleCopyMeal = (meal: Meal, mealType: string) => {
-    setCopiedMeal(meal);
-    setCopiedMealType(mealType);
-    setIsPasteModalVisible(true);
+  const handleShowPrepInstructions = (meal: Meal) => {
+    setSelectedMeal(meal);
+    setShowPrepInstructionsModal(true);
   };
 
-  const handlePasteMeal = async () => {
-    if (!copiedMeal || !selectedPasteMealTime) {
-      Alert.alert("Error", "Please select a meal time to paste the meal");
+  const handleDeleteMeal = async (date: string, mealType: string) => {
+    try {
+      const updatedMealPlan = { ...mealPlan };
+
+      if (updatedMealPlan[date] && updatedMealPlan[date][mealType]) {
+        delete updatedMealPlan[date][mealType];
+
+        // Remove date if empty
+        if (Object.keys(updatedMealPlan[date]).length === 0) {
+          delete updatedMealPlan[date];
+        }
+
+        await saveMealPlan(updatedMealPlan);
+        setMealPlan(updatedMealPlan);
+      }
+    } catch (error) {
+      console.error("Error deleting meal:", error);
+      Alert.alert("Error", "Failed to delete meal");
+    }
+  };
+
+  const handleSaveAsTemplate = async () => {
+    if (!templateName.trim()) {
+      Alert.alert("Error", "Please enter a template name");
       return;
     }
 
-    const updatedMealPlan = { ...mealPlan };
-    const dateKey = getFormattedDate(selectedPasteDate);
-
-    if (!updatedMealPlan[dateKey]) {
-      updatedMealPlan[dateKey] = {};
-    }
-
-    updatedMealPlan[dateKey][selectedPasteMealTime] = copiedMeal;
-
-    setMealPlan(updatedMealPlan);
     try {
-      await syncWithFirebase(updatedMealPlan);
-      Alert.alert(
-        "Success",
-        `Meal copied to ${selectedPasteMealTime} on ${getDisplayDate(dateKey)}`
-      );
-      setIsPasteModalVisible(false);
+      await createMealPlanTemplate(mealPlan, templateName);
+      setShowSaveTemplateModal(false);
+      setTemplateName("");
+      Alert.alert("Success", "Meal plan template saved!");
     } catch (error) {
-      Alert.alert("Error", "Failed to save copied meal");
+      console.error("Error saving template:", error);
+      Alert.alert("Error", "Failed to save template");
     }
   };
 
-  // Render Functions
-  const renderMealCard = (meal: Meal | undefined, mealType: string) => {
-    if (!meal || !meal.ingredients) return null;
-
-    const totalDailyCalories = userPreferences.calorieGoal;
-    const isWithinCalorieRange = meal.calories <= totalDailyCalories * 0.4; // 40% of daily calories as max per meal
-
-    return (
-      <Card
-        style={[styles.mealCard, !isWithinCalorieRange && styles.warningCard]}
-      >
-        <Card.Content>
-          <View style={styles.mealHeaderContainer}>
-            <Title style={styles.mealTitle}>{mealType}</Title>
-            <View style={styles.calorieContainer}>
-              <Text
-                style={[
-                  styles.calories,
-                  !isWithinCalorieRange && styles.warningText,
-                ]}
-              >
-                {meal.calories} calories
-              </Text>
-              {!isWithinCalorieRange && (
-                <IconButton
-                  icon="alert"
-                  size={20}
-                  color="#ff9800"
-                  onPress={() =>
-                    Alert.alert(
-                      "High Calorie Meal",
-                      "This meal exceeds 40% of your daily calorie goal"
-                    )
-                  }
-                />
-              )}
-            </View>
-          </View>
-
-          {meal.image ? (
-            <Image source={{ uri: meal.image }} style={styles.mealImage} />
-          ) : (
-            <View style={styles.placeholderImage}>
-              <Text>No image available</Text>
-            </View>
-          )}
-
-          <View style={styles.mealDetails}>
-            <Text style={styles.mealName}>{meal.name}</Text>
-            {meal.foodCategory ? (
-              <Text style={styles.cookingTime}>
-                Category: {meal.foodCategory}
-              </Text>
-            ) : (
-              <Text style={styles.cookingTime}>Category: General</Text>
-            )}
-            {meal.totalTime > 0 && (
-              <Text style={styles.cookingTime}>
-                Cooking time: {meal.totalTime} minutes
-              </Text>
-            )}
-
-            <View style={styles.nutritionContainer}>
-              <View style={styles.nutritionItem}>
-                <Text style={styles.nutritionLabel}>Protein</Text>
-                <Text style={styles.nutritionValue}>{meal.protein}g</Text>
-              </View>
-              <View style={styles.nutritionItem}>
-                <Text style={styles.nutritionLabel}>Carbs</Text>
-                <Text style={styles.nutritionValue}>{meal.carbs}g</Text>
-              </View>
-              <View style={styles.nutritionItem}>
-                <Text style={styles.nutritionLabel}>Fat</Text>
-                <Text style={styles.nutritionValue}>{meal.fat}g</Text>
-              </View>
-            </View>
-          </View>
-        </Card.Content>
-
-        <Card.Actions>
-          <Button
-            icon="content-copy"
-            mode="outlined"
-            onPress={() => handleCopyMeal(meal, mealType)}
-            style={styles.buttonCard}
-          >
-            Copy
-          </Button>
-          <Button
-            icon="format-list-bulleted"
-            mode="contained"
-            onPress={() => {
-              setSelectedIngredients(meal.ingredients);
-              setIsIngredientsModalVisible(true);
-            }}
-            style={[styles.buttonCard, styles.viewIngredientsButton]} // You can still include specific styles like `viewIngredientsButton`
-          >
-            Recipe
-          </Button>
-          <Button
-            icon="food-variant"
-            mode="outlined"
-            onPress={() => {
-              // Show meal prep instructions modal
-              setSelectedMeal(meal);
-              setShowPrepInstructionsModal(true);
-            }}
-            style={styles.buttonCard}
-          >
-            Prep
-          </Button>
-        </Card.Actions>
-      </Card>
-    );
+  const handleGenerateShoppingList = async () => {
+    try {
+      const ingredients = await generateShoppingListFromMealPlan(mealPlan);
+      await handleAddToShoppingList(ingredients);
+    } catch (error) {
+      console.error("Error generating shopping list:", error);
+      Alert.alert("Error", "Failed to generate shopping list");
+    }
   };
 
-  const renderIngredientItem = (ingredient: string) => {
-    const inShoppingList = shoppingList.some(
-      (item) => item.name === ingredient
-    );
-    const inStock = stock.some((item) => item.name === ingredient);
+  // Generate dates for display
+  const dates = generateDateRange(startDate, 7); // Show one week by default in the UI
 
-    return (
-      <List.Item
-        key={ingredient}
-        title={ingredient}
-        titleStyle={styles.ingredientTitle}
-        right={() => (
-          <IconButton
-            icon={inShoppingList || inStock ? "cart-remove" : "cart-plus"}
-            size={24}
-            color="#6200ea"
-            onPress={() =>
-              inShoppingList || inStock
-                ? removeFromShoppingList(ingredient)
-                : addToShoppingList(ingredient)
-            }
-          />
-        )}
-        left={() => (
-          <List.Icon
-            color="#6200ea"
-            icon={inStock ? "check-circle" : "circle-outline"}
-          />
-        )}
-      />
-    );
+  // Calculate daily nutritional totals for selected date
+  const calculateDailyTotals = () => {
+    const dayPlan = mealPlan[selectedDate] || {};
+    let calories = 0;
+    let protein = 0;
+    let carbs = 0;
+    let fat = 0;
+
+    if (dayPlan.breakfast) {
+      calories += dayPlan.breakfast.calories || 0;
+      protein += dayPlan.breakfast.protein || 0;
+      carbs += dayPlan.breakfast.carbs || 0;
+      fat += dayPlan.breakfast.fat || 0;
+    }
+
+    if (dayPlan.lunch) {
+      calories += dayPlan.lunch.calories || 0;
+      protein += dayPlan.lunch.protein || 0;
+      carbs += dayPlan.lunch.carbs || 0;
+      fat += dayPlan.lunch.fat || 0;
+    }
+
+    if (dayPlan.dinner) {
+      calories += dayPlan.dinner.calories || 0;
+      protein += dayPlan.dinner.protein || 0;
+      carbs += dayPlan.dinner.carbs || 0;
+      fat += dayPlan.dinner.fat || 0;
+    }
+
+    return { calories, protein, carbs, fat };
   };
 
-  // Main Render
+  const dailyTotals = calculateDailyTotals();
+
+  // Format days for display
+  const formatDayButtonLabel = (dateString: string) => {
+    const date = new Date(dateString);
+    return {
+      day: date.toLocaleDateString(undefined, { weekday: "short" }),
+      date: `${date.getMonth() + 1}/${date.getDate()}`,
+    };
+  };
+
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
+      <Title style={styles.title}>Meal Plan</Title>
+      {/* Date selector */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.daysContainer}
       >
-        {getDates().map((date) => (
-          <TouchableOpacity
-            key={date}
-            style={[
-              styles.dayButton,
-              date === selectedDate && styles.selectedDay,
-            ]}
-            onPress={() => setSelectedDate(date)}
-          >
-            <Text
+        {dates.map((date) => {
+          const dateObj = new Date(date);
+          return (
+            <TouchableOpacity
+              key={date}
               style={[
-                styles.dayText,
-                date === selectedDate && styles.selectedDayText,
+                styles.dayButton,
+                selectedDate === date && styles.selectedDay,
               ]}
+              onPress={() => setSelectedDate(date)}
             >
-              {getDisplayDate(date)}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                style={[
+                  styles.dayText,
+                  selectedDate === date && styles.selectedDayText,
+                ]}
+              >
+                {dateObj.toLocaleDateString(undefined, { weekday: "short" })}
+              </Text>
+              <Text
+                style={[
+                  styles.dateText,
+                  selectedDate === date && styles.selectedDayText,
+                ]}
+              >
+                {`${dateObj.getMonth() + 1}/${dateObj.getDate()}`}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
-
-      {mealPlan[selectedDate] ? (
-        <View>
-          {renderMealCard(mealPlan[selectedDate].breakfast, "Breakfast")}
-          {renderMealCard(mealPlan[selectedDate].lunch, "Lunch")}
-          {renderMealCard(mealPlan[selectedDate].dinner, "Dinner")}
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Daily nutritional summary */}
+        <View style={styles.nutritionContainer}>
+          <View style={styles.nutritionItem}>
+            <Text style={styles.nutritionLabel}>Calories</Text>
+            <Text style={styles.nutritionValue}>{dailyTotals.calories}</Text>
+          </View>
+          <View style={styles.nutritionItem}>
+            <Text style={styles.nutritionLabel}>Protein</Text>
+            <Text style={styles.nutritionValue}>{dailyTotals.protein}g</Text>
+          </View>
+          <View style={styles.nutritionItem}>
+            <Text style={styles.nutritionLabel}>Carbs</Text>
+            <Text style={styles.nutritionValue}>{dailyTotals.carbs}g</Text>
+          </View>
+          <View style={styles.nutritionItem}>
+            <Text style={styles.nutritionLabel}>Fat</Text>
+            <Text style={styles.nutritionValue}>{dailyTotals.fat}g</Text>
+          </View>
         </View>
-      ) : (
-        <Card style={styles.emptyCard}>
-          <Card.Content>
-            <Text style={styles.emptyText}>
-              No meals planned for this day. Generate a meal plan or add meals
-              manually.
-            </Text>
-          </Card.Content>
-        </Card>
-      )}
 
-      <Button
-        mode="contained"
-        onPress={() => setIsModalVisible(true)}
-        style={styles.generateButton}
-        disabled={isGenerating}
-      >
-        Generate Meal Plan
-      </Button>
+        {/* Breakfast Section */}
+        <Title style={styles.mealTitle}>Breakfast</Title>
+        {mealPlan[selectedDate]?.breakfast ? (
+          <MealCard
+            meal={mealPlan[selectedDate].breakfast}
+            onViewIngredients={() =>
+              handleViewIngredients(
+                mealPlan[selectedDate].breakfast.ingredients
+              )
+            }
+            onShowInstructions={() =>
+              handleShowPrepInstructions(mealPlan[selectedDate].breakfast)
+            }
+            onDelete={() => handleDeleteMeal(selectedDate, "breakfast")}
+            onCopy={() =>
+              handleCopyMeal(mealPlan[selectedDate].breakfast, "breakfast")
+            }
+          />
+        ) : (
+          <Button
+            mode="contained"
+            icon="plus"
+            onPress={() => generateMeal(selectedDate, "breakfast")}
+            style={styles.generateSingleButton}
+            loading={isGenerating}
+            disabled={isGenerating}
+          >
+            Add Breakfast
+          </Button>
+        )}
 
+        {/* Lunch Section */}
+        <Title style={styles.mealTitle}>Lunch</Title>
+        {mealPlan[selectedDate]?.lunch ? (
+          <MealCard
+            meal={mealPlan[selectedDate].lunch}
+            onViewIngredients={() =>
+              handleViewIngredients(mealPlan[selectedDate].lunch.ingredients)
+            }
+            onShowInstructions={() =>
+              handleShowPrepInstructions(mealPlan[selectedDate].lunch)
+            }
+            onDelete={() => handleDeleteMeal(selectedDate, "lunch")}
+            onCopy={() =>
+              handleCopyMeal(mealPlan[selectedDate].breakfast, "breakfast")
+            }
+          />
+        ) : (
+          <Button
+            mode="contained"
+            icon="plus"
+            onPress={() => generateMeal(selectedDate, "lunch")}
+            style={styles.generateSingleButton}
+            loading={isGenerating}
+            disabled={isGenerating}
+          >
+            Add Lunch
+          </Button>
+        )}
+
+        {/* Dinner Section */}
+        <Title style={styles.mealTitle}>Dinner</Title>
+        {mealPlan[selectedDate]?.dinner ? (
+          <MealCard
+            meal={mealPlan[selectedDate].dinner}
+            onViewIngredients={() =>
+              handleViewIngredients(mealPlan[selectedDate].dinner.ingredients)
+            }
+            onShowInstructions={() =>
+              handleShowPrepInstructions(mealPlan[selectedDate].dinner)
+            }
+            onDelete={() => handleDeleteMeal(selectedDate, "dinner")}
+            onCopy={() =>
+              handleCopyMeal(mealPlan[selectedDate].breakfast, "breakfast")
+            }
+          />
+        ) : (
+          <Button
+            mode="contained"
+            icon="plus"
+            onPress={() => generateMeal(selectedDate, "dinner")}
+            style={styles.generateSingleButton}
+            loading={isGenerating}
+            disabled={isGenerating}
+          >
+            Add Dinner
+          </Button>
+        )}
+
+        <View style={styles.buttonContainer}>
+          <Button
+            mode="contained"
+            onPress={() => setIsGenerateModalVisible(true)}
+            style={styles.generateButton}
+            icon="silverware-fork-knife"
+          >
+            Generate Meal Plan
+          </Button>
+        </View>
+      </ScrollView>
       {/* Modals */}
+      <PasteMealModal
+        visible={isPasteModalVisible}
+        onDismiss={() => setIsPasteModalVisible(false)}
+        selectedDate={selectedPasteDate}
+        setSelectedDate={setSelectedPasteDate}
+        selectedMealTime={selectedPasteMealTime}
+        setSelectedMealTime={setSelectedPasteMealTime}
+        onPaste={handlePasteMeal}
+        mealTimes={mealTimes}
+      />
+      {/* Generate Meal Plan Modal */}
       <Portal>
-        {/* Generate Meal Plan Modal */}
         <Modal
-          visible={isModalVisible}
-          onDismiss={() => !isGenerating && setIsModalVisible(false)}
+          visible={isGenerateModalVisible}
+          onDismiss={() => setIsGenerateModalVisible(false)}
           contentContainerStyle={styles.modalContainer}
         >
-          <Card style={styles.modalCard}>
-            <Card.Content>
-              <Title style={styles.modalTitle}>Generate Meal Plan</Title>
+          <Title style={styles.modalTitle}>Generate Meal Plan</Title>
 
-              {/* Start Date Section */}
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>Start Date</Text>
-                <Button
-                  mode="outlined"
-                  onPress={() => setShowDatePicker(true)}
-                  style={styles.dateButton}
-                  disabled={isGenerating}
-                >
-                  {getFormattedDate(startDate)}
-                </Button>
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={startDate}
-                    mode="date"
-                    display="default"
-                    onChange={(event, date) => {
-                      setShowDatePicker(false);
-                      if (date) {
-                        const correctedDate = new Date(
-                          date.getTime() - date.getTimezoneOffset() * 60000
-                        );
-                        setStartDate(correctedDate);
-                      }
-                    }}
-                  />
-                )}
-              </View>
+          <Text style={styles.sectionLabel}>Start Date</Text>
+          <TouchableOpacity style={styles.datePickerButton} onPress={() => {}}>
+            <Text style={styles.datePickerButtonText}>
+              {startDate.toISOString().split("T")[0]}
+            </Text>
+          </TouchableOpacity>
 
-              {/* Number of Days Section */}
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>Number of Days</Text>
-                <View style={styles.daysInputContainer}>
-                  <Button
-                    mode="outlined"
-                    onPress={() =>
-                      setNumberOfDays((prev) => Math.max(1, prev - 1))
-                    }
-                    disabled={isGenerating}
-                  >
-                    -
-                  </Button>
-                  <TextInput
-                    mode="outlined"
-                    keyboardType="numeric"
-                    value={numberOfDays.toString()}
-                    onChangeText={(value) =>
-                      setNumberOfDays(
-                        Math.max(1, Math.min(7, parseInt(value, 10) || 1))
-                      )
-                    }
-                    style={styles.daysInput}
-                    editable={!isGenerating}
-                  />
-                  <Button
-                    mode="outlined"
-                    onPress={() =>
-                      setNumberOfDays((prev) => Math.min(7, prev + 1))
-                    }
-                    disabled={isGenerating}
-                  >
-                    +
-                  </Button>
-                </View>
-              </View>
+          <Text style={styles.sectionLabel}>Number of Days</Text>
+          <View style={styles.daysInputContainer}>
+            <TouchableOpacity
+              style={styles.dayButton}
+              onPress={() => setNumberOfDays(Math.max(1, numberOfDays - 1))}
+            >
+              <Text style={styles.dayText}>-</Text>
+            </TouchableOpacity>
 
-              {/* Meal Times Section */}
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>Meal Periods</Text>
-                <View style={styles.checkboxContainer}>
-                  <Checkbox.Item
-                    label="Breakfast"
-                    status={mealTimes.breakfast ? "checked" : "unchecked"}
-                    onPress={() =>
-                      !isGenerating &&
-                      setMealTimes({
-                        ...mealTimes,
-                        breakfast: !mealTimes.breakfast,
-                      })
-                    }
-                    disabled={isGenerating}
-                  />
-                  <Checkbox.Item
-                    label="Lunch"
-                    status={mealTimes.lunch ? "checked" : "unchecked"}
-                    onPress={() =>
-                      !isGenerating &&
-                      setMealTimes({ ...mealTimes, lunch: !mealTimes.lunch })
-                    }
-                    disabled={isGenerating}
-                  />
-                  <Checkbox.Item
-                    label="Dinner"
-                    status={mealTimes.dinner ? "checked" : "unchecked"}
-                    onPress={() =>
-                      !isGenerating &&
-                      setMealTimes({ ...mealTimes, dinner: !mealTimes.dinner })
-                    }
-                    disabled={isGenerating}
-                  />
-                </View>
-              </View>
+            <TextInput
+              style={styles.daysInput}
+              value={numberOfDays.toString()}
+              onChangeText={(text) => {
+                const num = parseInt(text);
+                if (!isNaN(num) && num > 0) {
+                  setNumberOfDays(num);
+                }
+              }}
+              keyboardType="numeric"
+              mode="outlined"
+            />
 
-              {/* Generation Progress */}
-              {isGenerating && (
-                <View style={styles.progressContainer}>
-                  <ActivityIndicator size={24} color="#6200ea" />
-                  <Text style={styles.progressText}>
-                    Generating meal plan... {loadingProgress}%
-                  </Text>
-                  <View style={styles.progressBar}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        { width: `${loadingProgress}%` },
-                      ]}
-                    />
-                  </View>
-                </View>
-              )}
+            <TouchableOpacity
+              style={styles.dayButton}
+              onPress={() => setNumberOfDays(numberOfDays + 1)}
+            >
+              <Text style={styles.dayText}>+</Text>
+            </TouchableOpacity>
+          </View>
 
-              {/* Action Buttons */}
-              <View style={styles.modalButtonContainer}>
-                <Button
-                  mode="contained"
-                  onPress={handleGenerateMealPlan}
-                  style={[styles.modalButton, styles.modalSubmitButton]}
-                  disabled={
-                    isGenerating || !Object.values(mealTimes).some(Boolean)
-                  }
-                >
-                  {isGenerating ? "Generating..." : "Generate"}
-                </Button>
-                <Button
-                  mode="outlined"
-                  onPress={() => setIsModalVisible(false)}
-                  style={[styles.modalButton, styles.modalCancelButton]}
-                  disabled={isGenerating}
-                >
-                  Cancel
-                </Button>
-              </View>
-            </Card.Content>
-          </Card>
+          <Text style={styles.sectionLabel}>Meal Periods</Text>
+          <View>
+            <Checkbox.Item
+              label="Breakfast"
+              status={mealTimes.breakfast ? "checked" : "unchecked"}
+              onPress={() =>
+                setMealTimes({ ...mealTimes, breakfast: !mealTimes.breakfast })
+              }
+            />
+            <Checkbox.Item
+              label="Lunch"
+              status={mealTimes.lunch ? "checked" : "unchecked"}
+              onPress={() =>
+                setMealTimes({ ...mealTimes, lunch: !mealTimes.lunch })
+              }
+            />
+            <Checkbox.Item
+              label="Dinner"
+              status={mealTimes.dinner ? "checked" : "unchecked"}
+              onPress={() =>
+                setMealTimes({ ...mealTimes, dinner: !mealTimes.dinner })
+              }
+            />
+          </View>
+
+          <View style={styles.modalButtonContainer}>
+            <Button
+              mode="contained"
+              onPress={generateCompleteMealPlan}
+              style={[styles.modalButton, styles.modalSubmitButton]}
+              loading={isGenerating}
+              disabled={isGenerating}
+            >
+              Generate
+            </Button>
+            <Button
+              mode="outlined"
+              onPress={() => setIsGenerateModalVisible(false)}
+              style={[styles.modalButton, styles.modalCancelButton]}
+            >
+              Cancel
+            </Button>
+          </View>
+
+          {isGenerating && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#6200ea" />
+              <Text style={styles.loadingText}>
+                Generating your meal plan... {loadingProgress}%
+              </Text>
+            </View>
+          )}
         </Modal>
+      </Portal>
+      {/* Ingredients Modal */}
+      <Portal>
+        <Modal
+          visible={isIngredientsModalVisible}
+          onDismiss={() => setIsIngredientsModalVisible(false)}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <View style={styles.modalHeader}>
+            <Title style={styles.modalTitle}>Ingredients</Title>
+            <IconButton
+              icon="close"
+              size={24}
+              onPress={() => setIsIngredientsModalVisible(false)}
+              style={styles.closeIcon}
+            />
+          </View>
 
-        {/* Meal Prep Instructions Modal */}
+          <ScrollView style={styles.ingredientsList}>
+            {selectedIngredients.map((ingredient, index) => (
+              <View key={index} style={styles.ingredientItem}>
+                <Text style={styles.ingredientTitle}>{ingredient}</Text>
+                <IconButton
+                  icon="cart-plus"
+                  size={20}
+                  color="#6200ea"
+                  onPress={() => handleAddSingleIngredient(ingredient)}
+                  style={styles.addButton}
+                />
+              </View>
+            ))}
+          </ScrollView>
+
+          <Button
+            mode="contained"
+            onPress={() => handleAddToShoppingList(selectedIngredients)}
+            style={styles.fullWidthButton}
+            icon="cart-plus"
+          >
+            Add All to Shopping List
+          </Button>
+        </Modal>
+      </Portal>
+      {/* Prep Instructions Modal */}
+      <Portal>
         <Modal
           visible={showPrepInstructionsModal}
           onDismiss={() => setShowPrepInstructionsModal(false)}
           contentContainerStyle={styles.modalContainer}
         >
-          <Card>
-            <Card.Content>
-              <Title style={styles.modalTitle}>Meal Prep Instructions</Title>
-
+          {selectedMeal && (
+            <>
+              <Title style={styles.modalTitle}>{selectedMeal.name}</Title>
+              <Text style={styles.prepTimeText}>
+                Preparation time: {selectedMeal.totalTime} minutes
+              </Text>
               <ScrollView style={styles.prepInstructionsContainer}>
-                {selectedMeal?.instructions &&
+                {selectedMeal.instructions &&
                 selectedMeal.instructions.length > 0 ? (
-                  <>
-                    <Text style={styles.prepTimeText}>
-                      Cooking Time: {selectedMeal.totalTime} minutes
-                    </Text>
-
-                    <Title style={styles.sectionTitle}>Instructions</Title>
-                    {selectedMeal.instructions.map((instruction, index) => (
-                      <Text key={index} style={styles.instructionText}>
-                        {index + 1}. {instruction}
+                  selectedMeal.instructions.map((instruction) => (
+                    <View key={instruction.number} style={{ marginBottom: 10 }}>
+                      <Text style={{ fontWeight: "bold" }}>
+                        Step {instruction.number}
                       </Text>
-                    ))}
-                  </>
+                      <Text style={styles.instructionText}>
+                        {instruction.step}
+                      </Text>
+                    </View>
+                  ))
                 ) : (
-                  <Text>
-                    No preparation instructions available for this meal.
+                  <Text style={styles.instructionText}>
+                    No detailed instructions available. Please check the recipe
+                    source for more information.
                   </Text>
                 )}
-
-                {mealPrepInstructions && (
-                  <>
-                    <Title style={styles.sectionTitle}>
-                      Additional Cooking Tips
-                    </Title>
-                    {mealPrepInstructions.cookingTips.map((tip, index) => (
-                      <Text key={index} style={styles.tipText}>
-                        • {tip}
-                      </Text>
-                    ))}
-                  </>
-                )}
               </ScrollView>
-
               <Button
                 mode="contained"
                 onPress={() => setShowPrepInstructionsModal(false)}
@@ -1202,132 +844,44 @@ const MealPlanScreen: React.FC = () => {
               >
                 Close
               </Button>
-            </Card.Content>
-          </Card>
-        </Modal>
-
-        {/* Ingredients Modal */}
-        <Modal
-          visible={isIngredientsModalVisible}
-          onDismiss={() => setIsIngredientsModalVisible(false)}
-          contentContainerStyle={styles.modalContainer}
-        >
-          <Card>
-            <Card.Content>
-              <Title style={styles.modalTitle}>Ingredients</Title>
-              <ScrollView style={styles.ingredientsList}>
-                {selectedIngredients.map((ingredient, index) => (
-                  <List.Item
-                    key={index}
-                    title={ingredient}
-                    left={(props) => <List.Icon {...props} icon="food" />}
-                    right={() => (
-                      <View style={styles.ingredientActions}>
-                        {shoppingList.some(
-                          (item) => item.name === ingredient
-                        ) ? (
-                          <IconButton
-                            icon="cart-remove"
-                            size={24}
-                            onPress={() => removeFromShoppingList(ingredient)}
-                          />
-                        ) : (
-                          <IconButton
-                            icon="cart-plus"
-                            size={24}
-                            onPress={() => addToShoppingList(ingredient)}
-                          />
-                        )}
-                      </View>
-                    )}
-                  />
-                ))}
-              </ScrollView>
-              <Button
-                mode="contained"
-                onPress={() => setIsIngredientsModalVisible(false)}
-                style={styles.closeButton}
-              >
-                Close
-              </Button>
-            </Card.Content>
-          </Card>
-        </Modal>
-
-        {/* Copy/Paste Meal Modal */}
-        <Modal
-          visible={isPasteModalVisible}
-          onDismiss={() => setIsPasteModalVisible(false)}
-          contentContainerStyle={styles.modalContainer}
-        >
-          <Card>
-            <Card.Content>
-              <Title style={styles.modalTitle}>Copy Meal</Title>
-
-              <Text style={styles.modalSubtitle}>
-                Select date and meal time to paste
-              </Text>
-
-              {/* Date Selection */}
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>Select Date</Text>
-                <Button
-                  mode="outlined"
-                  onPress={() => setShowDatePicker(true)}
-                  style={styles.dateButton}
-                >
-                  {getFormattedDate(selectedPasteDate)}
-                </Button>
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={selectedPasteDate}
-                    mode="date"
-                    display="default"
-                    onChange={(event, date) => {
-                      setShowDatePicker(false);
-                      if (date) {
-                        setSelectedPasteDate(date);
-                      }
-                    }}
-                  />
-                )}
-              </View>
-
-              {/* Meal Time Selection */}
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>Select Meal Time</Text>
-                <RadioButton.Group
-                  onValueChange={(value) => setSelectedPasteMealTime(value)}
-                  value={selectedPasteMealTime}
-                >
-                  <RadioButton.Item label="Breakfast" value="breakfast" />
-                  <RadioButton.Item label="Lunch" value="lunch" />
-                  <RadioButton.Item label="Dinner" value="dinner" />
-                </RadioButton.Group>
-              </View>
-
-              <View style={styles.modalButtonContainer}>
-                <Button
-                  mode="contained"
-                  onPress={handlePasteMeal}
-                  style={[styles.modalButton, styles.modalSubmitButton]}
-                  disabled={!selectedPasteMealTime}
-                >
-                  Paste Meal
-                </Button>
-                <Button
-                  mode="outlined"
-                  onPress={() => setIsPasteModalVisible(false)}
-                  style={[styles.modalButton, styles.modalCancelButton]}
-                >
-                  Cancel
-                </Button>
-              </View>
-            </Card.Content>
-          </Card>
+            </>
+          )}
         </Modal>
       </Portal>
-    </ScrollView>
+      {/* Save Template Modal */}
+      <Portal>
+        <Modal
+          visible={showSaveTemplateModal}
+          onDismiss={() => setShowSaveTemplateModal(false)}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <Title style={styles.modalTitle}>Save as Template</Title>
+          <TextInput
+            label="Template Name"
+            value={templateName}
+            onChangeText={setTemplateName}
+            style={styles.input}
+            mode="outlined"
+          />
+          <View style={styles.modalButtonContainer}>
+            <Button
+              mode="contained"
+              onPress={handleSaveAsTemplate}
+              style={styles.modalButton}
+            >
+              Save
+            </Button>
+            <Button
+              mode="outlined"
+              onPress={() => setShowSaveTemplateModal(false)}
+              style={styles.modalButton}
+            >
+              Cancel
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
+    </View>
   );
 };
 
