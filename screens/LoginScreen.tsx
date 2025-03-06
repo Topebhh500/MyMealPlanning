@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, ImageBackground } from "react-native"; // Add ImageBackground import
 import { TextInput, Button, Title, Text, Snackbar } from "react-native-paper";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { auth } from "../api/firebase";
@@ -43,6 +43,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     void checkFingerprintSettings();
   }, []);
 
+  const [passwordVisible, setPasswordVisible] = useState<boolean>(false);
   const checkFingerprintSettings = async (): Promise<void> => {
     try {
       const storedSetting = await AsyncStorage.getItem("fingerprintEnabled");
@@ -114,67 +115,87 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Title style={styles.headerTitle}>Tervetuloa!</Title>
-        <Title style={styles.appTitle}>Meal Planning Mate!</Title>
-      </View>
+    <ImageBackground
+      source={require("../assets/food-background.jpg")}
+      style={styles.backgroundImage}
+      resizeMode="cover" // Add this for better image display
+    >
+      <View style={styles.overlay}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <Title style={styles.headerTitle}>Welcome!</Title>
+            <Title style={styles.appTitle}>Meal Planning Mate!</Title>
+          </View>
 
-      <View style={styles.formContainer}>
-        <View style={styles.logoContainer}>
-          <Icon name="food-variant" size={80} color="#6200ea" />
+          <View style={styles.formContainer}>
+            <View style={styles.logoContainer}>
+              <Icon name="food-fork-drink" size={70} color="#6200ea" />
+            </View>
+
+            <TextInput
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              style={styles.input}
+              keyboardType="email-address"
+              mode="outlined"
+              outlineColor="#6200ea"
+              activeOutlineColor="#6200ea"
+              left={<TextInput.Icon icon="email" color="#6200ea" />}
+              autoCapitalize="none"
+            />
+
+            <TextInput
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!passwordVisible} // Toggle based on state
+              style={styles.input}
+              mode="outlined"
+              outlineColor="#6200ea"
+              activeOutlineColor="#6200ea"
+              left={<TextInput.Icon icon="lock" color="#6200ea" />}
+              right={
+                <TextInput.Icon
+                  icon={passwordVisible ? "eye-off" : "eye"} // Toggle icon
+                  color="#6200ea"
+                  onPress={() => setPasswordVisible(!passwordVisible)} // Toggle state
+                />
+              }
+            />
+
+            <Button
+              mode="contained"
+              onPress={handleLogin}
+              style={styles.loginButton}
+              loading={isLoading}
+              disabled={isLoading}
+              labelStyle={{ fontSize: 16, fontWeight: "bold" }}
+            >
+              {isLoading ? "Logging in..." : "Login"}
+            </Button>
+
+            {fingerprintEnabled && (
+              <Button
+                mode="outlined"
+                onPress={handleFingerprintLogin}
+                style={styles.fingerprintButton}
+                icon="fingerprint"
+                labelStyle={{ color: "#6200ea", fontWeight: "bold" }}
+              >
+                Login with Fingerprint
+              </Button>
+            )}
+
+            <Button
+              onPress={() => navigation.navigate("Register")}
+              style={styles.registerButton}
+              labelStyle={styles.registerButtonText}
+            >
+              Don't have an account? Register
+            </Button>
+          </View>
         </View>
-
-        <TextInput
-          label="Email"
-          value={email}
-          onChangeText={setEmail}
-          style={styles.input}
-          keyboardType="email-address"
-          mode="outlined"
-          activeOutlineColor="#6200ea"
-          left={<TextInput.Icon icon="email" color="#6200ea" />}
-        />
-
-        <TextInput
-          label="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          style={styles.input}
-          mode="outlined"
-          activeOutlineColor="#6200ea"
-          left={<TextInput.Icon icon="lock" color="#6200ea" />}
-        />
-
-        <Button
-          mode="contained"
-          onPress={handleLogin}
-          style={styles.loginButton}
-          loading={isLoading}
-          disabled={isLoading}
-        >
-          {isLoading ? "Logging in..." : "Login"}
-        </Button>
-
-        {fingerprintEnabled && (
-          <Button
-            mode="outlined"
-            onPress={handleFingerprintLogin}
-            style={styles.fingerprintButton}
-            icon="fingerprint"
-          >
-            Login with Fingerprint
-          </Button>
-        )}
-
-        <Button
-          onPress={() => navigation.navigate("Register")}
-          style={styles.registerButton}
-          labelStyle={styles.registerButtonText}
-        >
-          Don't have an account? Register
-        </Button>
 
         <Snackbar
           visible={visible}
@@ -189,7 +210,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           {snackbarMessage}
         </Snackbar>
       </View>
-    </View>
+    </ImageBackground>
   );
 };
 
