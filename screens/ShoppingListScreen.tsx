@@ -14,6 +14,8 @@ import {
   Dialog,
   Portal,
   Text,
+  Checkbox,
+  Menu,
 } from "react-native-paper";
 import { TabView, SceneMap, NavigationState } from "react-native-tab-view";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -49,12 +51,6 @@ interface StockTabProps {
   onRemoveItem: (item: StockItem) => void;
 }
 
-interface TabBarProps {
-  navigationState: NavigationState<Route>;
-  index: number;
-  setIndex: (index: number) => void;
-}
-
 const ShoppingListTab: React.FC<ShoppingListTabProps> = ({
   shoppingList,
   onToggleItem,
@@ -72,10 +68,10 @@ const ShoppingListTab: React.FC<ShoppingListTabProps> = ({
       shoppingList.map((item, index) => (
         <Surface key={index} style={styles.listItem}>
           <View style={styles.itemContainer}>
-            <IconButton
-              icon={item.checked ? "checkbox-marked" : "checkbox-blank-outline"}
-              color="#6200ea"
+            <Checkbox
+              status={item.checked ? "checked" : "unchecked"}
               onPress={() => onToggleItem(index)}
+              color="#6200ea"
             />
             <Text
               style={[styles.itemText, item.checked && styles.checkedItemText]}
@@ -162,30 +158,53 @@ const ShoppingListScreen: React.FC = () => {
     { key: "shoppingList", title: "Items to Buy" },
     { key: "stock", title: "Available Stock" },
   ]);
+  const [menuVisible, setMenuVisible] = useState<boolean>(false);
 
   useEffect(() => {
-    void loadData();
+    const user = auth.currentUser;
+    if (!user) return;
+
+    // Set up real-time listeners
+    const unsubscribeShoppingList = firestore
+      .collection("shoppingLists")
+      .doc(user.uid)
+      .onSnapshot(
+        (doc) => {
+          if (doc.exists) {
+            setShoppingList(doc.data()?.items || []);
+          } else {
+            setShoppingList([]);
+          }
+        },
+        (error) => {
+          console.error("Error in shopping list listener:", error);
+          Alert.alert("Error", "Failed to sync shopping list data");
+        }
+      );
+
+    const unsubscribeStock = firestore
+      .collection("stocks")
+      .doc(user.uid)
+      .onSnapshot(
+        (doc) => {
+          if (doc.exists) {
+            setStock(doc.data()?.items || []);
+          } else {
+            setStock([]);
+          }
+        },
+        (error) => {
+          console.error("Error in stock listener:", error);
+          Alert.alert("Error", "Failed to sync stock data");
+        }
+      );
+
+    // Clean up listeners on unmount
+    return () => {
+      unsubscribeShoppingList();
+      unsubscribeStock();
+    };
   }, []);
-
-  const loadData = async (): Promise<void> => {
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        const [shoppingListDoc, stockDoc] = await Promise.all([
-          firestore.collection("shoppingLists").doc(user.uid).get(),
-          firestore.collection("stocks").doc(user.uid).get(),
-        ]);
-
-        setShoppingList(
-          shoppingListDoc.exists ? shoppingListDoc.data()?.items || [] : []
-        );
-        setStock(stockDoc.exists ? stockDoc.data()?.items || [] : []);
-      }
-    } catch (error) {
-      console.error("Error loading data:", error);
-      Alert.alert("Error", "Failed to load data");
-    }
-  };
 
   const saveToFirebase = async (
     collection: string,
@@ -297,6 +316,44 @@ const ShoppingListScreen: React.FC = () => {
     }
   };
 
+  // New function to clear the shopping list
+  const clearShoppingList = async (): Promise<void> => {
+    try {
+      // Show confirmation dialog before clearing
+      Alert.alert(
+        "Clear Shopping List",
+        "Are you sure you want to remove all items from your shopping list?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Clear All",
+            style: "destructive",
+            onPress: async () => {
+              const user = auth.currentUser;
+              if (user) {
+                // Update Firestore with empty array
+                await firestore
+                  .collection("shoppingLists")
+                  .doc(user.uid)
+                  .set({ items: [] });
+
+                // Update local state
+                setShoppingList([]);
+                Alert.alert("Success", "Shopping list cleared successfully");
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error clearing shopping list:", error);
+      Alert.alert("Error", "Failed to clear shopping list");
+    }
+  };
+
   const renderTabBar = (props: {
     navigationState: NavigationState<Route>;
   }): JSX.Element => (
@@ -343,6 +400,18 @@ const ShoppingListScreen: React.FC = () => {
 
   return (
     <View style={styles.mainContainer}>
+      <View style={styles.headerContainer}>
+        <Text style={styles.screenTitle}>Shopping List</Text>
+        {index === 0 && ( // Only show clear button on shopping list tab
+          <IconButton
+            icon="trash-can-outline"
+            color="#FFOOOO"
+            size={24}
+            onPress={clearShoppingList}
+          />
+        )}
+      </View>
+
       <TabView
         navigationState={{ index, routes }}
         renderScene={renderScene}
