@@ -14,7 +14,7 @@ interface FirebaseConfig {
   measurementId: string | undefined;
 }
 
-// Your Firebase configuration with type annotation
+// Firebase configuration with type annotation
 const firebaseConfig: FirebaseConfig = {
   apiKey: process.env.FIREBASE_API_KEY,
   authDomain: process.env.FIREBASE_AUTH_DOMAIN,
@@ -30,14 +30,13 @@ if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 
-// Add type annotations for Firebase services
+// Type annotations for Firebase services
 const auth: firebase.auth.Auth = firebase.auth();
 const firestore: firebase.firestore.Firestore = firebase.firestore();
 const storage: firebase.storage.Storage = firebase.storage();
 
 export { auth, firestore, storage };
 
-// Optionally, you can also export types that might be useful elsewhere in your app
 export type FirebaseAuth = firebase.auth.Auth;
 export type FirebaseFirestore = firebase.firestore.Firestore;
 export type FirebaseStorage = firebase.storage.Storage;

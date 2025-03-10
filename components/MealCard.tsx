@@ -9,7 +9,7 @@ interface MealCardProps {
   onViewIngredients: () => void;
   onShowInstructions: () => void;
   onDelete: () => void;
-  onCopy: () => void; // Add this
+  onCopy: () => void;
 }
 const MealCard = ({
   meal,
@@ -17,7 +17,7 @@ const MealCard = ({
   onShowInstructions,
   onDelete,
   onCopy,
-}) => {
+}: MealCardProps) => {
   return (
     <Card style={styles.mealCard}>
       {meal.image && (

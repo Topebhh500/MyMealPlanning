@@ -1,9 +1,7 @@
 // MealQueryHelper.ts - Provides meal query lists based on dietary preferences
 import { MealQueries } from "../types/MealTypes";
 
-/**
- * Returns meal-specific query terms based on dietary preferences
- */
+// Returns meal-specific query terms based on dietary preferences
 export const getMealQueries = (preferences: string[]): MealQueries => {
   const queryBank = {
     breakfast: {
