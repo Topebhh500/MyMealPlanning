@@ -251,6 +251,10 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderColor: "#6200ea",
   },
+  link: {
+    color: "#6200ea", // Use your app's primary color
+    textDecorationLine: "underline",
+  },
 });
 
 export default styles;

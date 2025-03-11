@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { auth } from "./api/firebase";
 import { View } from "react-native";
 import { User } from "firebase/auth";
+import { initializeRateLimiter } from "./api/RateLimiter";
 
 // Import screens
 import LoginScreen from "./screens/LoginScreen";
@@ -122,6 +123,7 @@ export default function App(): JSX.Element {
   }
 
   useEffect(() => {
+    initializeRateLimiter();
     const subscriber = auth.onAuthStateChanged(onAuthStateChanged);
     return subscriber; // Unsubscribe on unmount
   }, []);

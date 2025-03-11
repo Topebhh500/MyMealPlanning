@@ -435,6 +435,12 @@ const styles = StyleSheet.create({
   addButton: {
     margin: 0,
   },
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
 });
 
 export default styles;
