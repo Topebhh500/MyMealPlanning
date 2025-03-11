@@ -1,6 +1,12 @@
 import axios, { AxiosResponse } from "axios";
+import {
+  getApiKey,
+  withRetry,
+  recordApiCall,
+  canMakeApiCall,
+} from "./RateLimiter";
 
-const API_KEY = process.env.SPOONACULAR_API_KEY;
+//const API_KEY = process.env.SPOONACULAR_API_KEY;
 const BASE_URL = "https://api.spoonacular.com";
 
 // Interface definitions
@@ -134,97 +140,102 @@ export const searchRecipes = async (
   query: string,
   params: SearchParams = {}
 ): Promise<Array<{ recipe: any }>> => {
-  try {
-    const queryParams = new URLSearchParams();
-    queryParams.append("apiKey", API_KEY as string);
-    queryParams.append("query", query);
-    queryParams.append("number", "10"); // Number of results to return
-    queryParams.append("addNutrition", "true");
+  return withRetry(async () => {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.append("apiKey", getApiKey());
+      queryParams.append("query", query);
+      queryParams.append("number", "10"); // Number of results to return
+      queryParams.append("addNutrition", "true");
 
-    // Add diet parameter if provided
-    if (params.diet && DIET_MAPPING[params.diet]) {
-      queryParams.append("diet", DIET_MAPPING[params.diet]);
-    }
-
-    // Add meal type if provided
-    if (params.mealType) {
-      queryParams.append("type", params.mealType);
-    }
-
-    // Add calorie restriction if provided
-    if (params.calories) {
-      const minCal = Math.max(0, params.calories - 150);
-      const maxCal = params.calories + 150;
-      queryParams.append("maxCalories", maxCal.toString());
-      queryParams.append("minCalories", minCal.toString());
-    }
-
-    // Add allergies/intolerances if provided
-    if (params.excluded && params.excluded.length > 0) {
-      const intolerances = mapAllergensToIntolerances(params.excluded);
-      if (intolerances) {
-        queryParams.append("intolerances", intolerances);
+      // Add diet parameter if provided
+      if (params.diet && DIET_MAPPING[params.diet]) {
+        queryParams.append("diet", DIET_MAPPING[params.diet]);
       }
-    }
 
-    // Exclude ingredients
-    if (params.excluded && params.excluded.length > 0) {
-      queryParams.append("excludeIngredients", params.excluded.join(","));
-    }
+      // Add meal type if provided
+      if (params.mealType) {
+        queryParams.append("type", params.mealType);
+      }
 
-    const url = `${BASE_URL}/recipes/complexSearch?${queryParams.toString()}`;
-    const response: AxiosResponse<RecipeSearchResult> = await axios.get(url);
+      // Add calorie restriction if provided
+      if (params.calories) {
+        const minCal = Math.max(0, params.calories - 150);
+        const maxCal = params.calories + 150;
+        queryParams.append("maxCalories", maxCal.toString());
+        queryParams.append("minCalories", minCal.toString());
+      }
 
-    if (!response.data || !response.data.results) {
-      throw new Error("Invalid response format from Spoonacular API");
-    }
+      // Add allergies/intolerances if provided
+      if (params.excluded && params.excluded.length > 0) {
+        const intolerances = mapAllergensToIntolerances(params.excluded);
+        if (intolerances) {
+          queryParams.append("intolerances", intolerances);
+        }
+      }
 
-    // Get detailed information for each recipe
-    const recipeDetails = await Promise.all(
-      response.data.results.map((recipe) => getRecipeInformation(recipe.id))
-    );
+      // Exclude ingredients
+      if (params.excluded && params.excluded.length > 0) {
+        queryParams.append("excludeIngredients", params.excluded.join(","));
+      }
 
-    // Transform to match expected format
-    return recipeDetails.map((detail) => ({
-      recipe: {
-        id: detail.id,
-        label: detail.title,
-        image: detail.image,
-        source: detail.sourceName,
-        url: detail.sourceUrl,
-        calories:
-          detail.nutrition.nutrients.find((n) => n.name === "Calories")
-            ?.amount || 0,
-        totalTime: detail.readyInMinutes,
-        ingredientLines: detail.extendedIngredients.map((ing) => ing.original),
-        totalNutrients: {
-          PROCNT: {
-            quantity:
-              detail.nutrition.nutrients.find((n) => n.name === "Protein")
-                ?.amount || 0,
+      const url = `${BASE_URL}/recipes/complexSearch?${queryParams.toString()}`;
+      const response: AxiosResponse<RecipeSearchResult> = await axios.get(url);
+
+      if (!response.data || !response.data.results) {
+        throw new Error("Invalid response format from Spoonacular API");
+      }
+
+      // Get detailed information for each recipe
+      const recipeDetails = await Promise.all(
+        response.data.results.map((recipe) => getRecipeInformation(recipe.id))
+      );
+
+      // Transform to match expected format
+      return recipeDetails.map((detail) => ({
+        recipe: {
+          id: detail.id,
+          label: detail.title,
+          image: detail.image,
+          source: detail.sourceName,
+          url: detail.sourceUrl,
+          calories:
+            detail.nutrition.nutrients.find((n) => n.name === "Calories")
+              ?.amount || 0,
+          totalTime: detail.readyInMinutes,
+          ingredientLines: detail.extendedIngredients.map(
+            (ing) => ing.original
+          ),
+          totalNutrients: {
+            PROCNT: {
+              quantity:
+                detail.nutrition.nutrients.find((n) => n.name === "Protein")
+                  ?.amount || 0,
+            },
+            CHOCDF: {
+              quantity:
+                detail.nutrition.nutrients.find(
+                  (n) => n.name === "Carbohydrates"
+                )?.amount || 0,
+            },
+            FAT: {
+              quantity:
+                detail.nutrition.nutrients.find((n) => n.name === "Fat")
+                  ?.amount || 0,
+            },
           },
-          CHOCDF: {
-            quantity:
-              detail.nutrition.nutrients.find((n) => n.name === "Carbohydrates")
-                ?.amount || 0,
-          },
-          FAT: {
-            quantity:
-              detail.nutrition.nutrients.find((n) => n.name === "Fat")
-                ?.amount || 0,
-          },
+          foodCategory: detail.dishTypes[0] || "",
         },
-        foodCategory: detail.dishTypes[0] || "",
-      },
-    }));
-  } catch (error) {
-    console.error("API Error Details:", {
-      message: error instanceof Error ? error.message : "Unknown error",
-      response: axios.isAxiosError(error) ? error.response?.data : undefined,
-      status: axios.isAxiosError(error) ? error.response?.status : undefined,
-    });
-    throw error;
-  }
+      }));
+    } catch (error) {
+      console.error("API Error Details:", {
+        message: error instanceof Error ? error.message : "Unknown error",
+        response: axios.isAxiosError(error) ? error.response?.data : undefined,
+        status: axios.isAxiosError(error) ? error.response?.status : undefined,
+      });
+      throw error;
+    }
+  });
 };
 
 /**
@@ -234,7 +245,7 @@ export const getRecipeInformation = async (
   id: number
 ): Promise<RecipeDetail> => {
   try {
-    const url = `${BASE_URL}/recipes/${id}/information?apiKey=${API_KEY}&includeNutrition=true`;
+    const url = `${BASE_URL}/recipes/${id}/information?apiKey=${getApiKey()}&includeNutrition=true`;
     const response: AxiosResponse<RecipeDetail> = await axios.get(url);
     return response.data;
   } catch (error) {
@@ -250,7 +261,7 @@ export const getRecipeInstructions = async (
   id: number
 ): Promise<{ steps: { number: number; step: string }[] }> => {
   try {
-    const url = `${BASE_URL}/recipes/${id}/analyzedInstructions?apiKey=${API_KEY}`;
+    const url = `${BASE_URL}/recipes/${id}/analyzedInstructions?apiKey=${getApiKey()}`;
     const response: AxiosResponse<RecipeInstructions[]> = await axios.get(url);
 
     if (!response.data || response.data.length === 0) {
@@ -281,7 +292,7 @@ export const generateMealPlan = async (
 ): Promise<MealPlanResponse> => {
   try {
     const queryParams = new URLSearchParams();
-    queryParams.append("apiKey", API_KEY as string);
+    queryParams.append("apiKey", getApiKey());
     queryParams.append("timeFrame", timeFrame);
     queryParams.append("targetCalories", targetCalories.toString());
 
@@ -310,7 +321,7 @@ export const generateShoppingList = async (
   recipeIds: number[]
 ): Promise<ShoppingListItem[]> => {
   try {
-    const url = `${BASE_URL}/recipes/computeShoppingList?apiKey=${API_KEY}`;
+    const url = `${BASE_URL}/recipes/computeShoppingList?apiKey=${getApiKey()}`;
     const response: AxiosResponse<{ aisles: { items: ShoppingListItem[] }[] }> =
       await axios.post(url, {
         items: recipeIds.map((id) => ({ id, aisle: "unknown" })),
@@ -323,4 +334,38 @@ export const generateShoppingList = async (
     console.error("Error generating shopping list:", error);
     throw error;
   }
+};
+
+/**
+ * Formats API errors into user-friendly messages
+ */
+export const handleApiError = (error: any): string => {
+  // Check if it's an Axios error with a response
+  if (error.response) {
+    const statusCode = error.response.status;
+
+    // Handle common status codes
+    switch (statusCode) {
+      case 401:
+        return "Authentication failed. Please check your API key in settings.";
+      case 402:
+        return "API quota exceeded. Please try again later or update your plan.";
+      case 404:
+        return "The requested recipe or information couldn't be found.";
+      case 429:
+        return "Too many requests. Please try again in a few minutes.";
+      case 500:
+        return "The recipe service is experiencing issues. Please try again later.";
+      default:
+        return "Something went wrong with the recipe service. Please try again.";
+    }
+  }
+
+  // Handle network errors
+  if (error.message && error.message.includes("Network Error")) {
+    return "Cannot connect to the recipe service. Please check your internet connection.";
+  }
+
+  // Generic error message as fallback
+  return "Something went wrong. Please try again.";
 };

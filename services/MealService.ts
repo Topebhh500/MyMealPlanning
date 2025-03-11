@@ -28,7 +28,7 @@ export const getRandomMeal = async (
       userPreferences.calorieGoal * mealCalorieDistribution[mealType]
     );
 
-    // Setup query parameters
+    // Setup base query parameters
     let queryParams = {
       mealType: mealType.toLowerCase(),
       calories: targetCalories,
@@ -63,17 +63,57 @@ export const getRandomMeal = async (
 
     const queries = getMealQueries(userPreferences.dietaryPreferences || []);
     const mealOptions = queries[mealType];
+    const randomQuery =
+      mealOptions[Math.floor(Math.random() * mealOptions.length)];
 
-    // Use the RateLimiter's withRetry function to handle API calls
-    const results = await withRetry(async () => {
-      const randomQuery =
-        mealOptions[Math.floor(Math.random() * mealOptions.length)];
+    // Try with all preferences first
+    let results = await withRetry(async () => {
       return searchRecipes(randomQuery, queryParams);
     });
 
+    // If no results, try with just the meal type and allergies (remove dietary restrictions)
+    if (!results || results.length === 0) {
+      console.log(
+        `No results with full preferences, trying with fewer restrictions...`
+      );
+
+      const simplifiedParams = {
+        ...queryParams,
+        diet: undefined,
+        health: [] as string[],
+      };
+
+      results = await withRetry(async () => {
+        return searchRecipes(randomQuery, simplifiedParams);
+      });
+    }
+
+    // If still no results, try with just meal type (no dietary restrictions or allergies)
+    if (!results || results.length === 0) {
+      console.log(`Still no results, trying with minimal restrictions...`);
+
+      const minimalParams = {
+        mealType: mealType.toLowerCase(),
+        calories: targetCalories,
+      };
+
+      results = await withRetry(async () => {
+        return searchRecipes(randomQuery, minimalParams);
+      });
+    }
+
+    // If we still don't have results, try a completely generic search
+    if (!results || results.length === 0) {
+      console.log(`Last attempt with generic search...`);
+
+      results = await withRetry(async () => {
+        return searchRecipes(mealType, {});
+      });
+    }
+
     if (!results || results.length === 0) {
       throw new Error(
-        `Unable to find ${mealType} recipes matching your preferences. Try adjusting your dietary restrictions.`
+        `Unable to find ${mealType} recipes. Please check your internet connection or try again later.`
       );
     }
 
@@ -113,9 +153,17 @@ export const getRandomMeal = async (
     };
   } catch (error) {
     console.error(`Error getting ${mealType} recipe:`, error);
-    throw new Error(
-      `Failed to get ${mealType} recipe. Please check your dietary preferences and try again.`
-    );
+
+    // Provide a more user-friendly error message
+    if (error.message && error.message.includes("Unable to find")) {
+      throw new Error(
+        `Unable to find ${mealType} recipes matching your preferences. Try adjusting your dietary restrictions.`
+      );
+    } else {
+      throw new Error(
+        `Failed to get ${mealType} recipe. Please check your internet connection and try again.`
+      );
+    }
   }
 };
 
