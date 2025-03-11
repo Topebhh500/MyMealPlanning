@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, ScrollView, Alert } from "react-native";
+import { View, ScrollView, Alert, Linking } from "react-native";
 import {
   Title,
   TextInput,
@@ -62,8 +62,6 @@ const ProfileScreen: React.FC = () => {
   const [fingerprintSupported, setFingerprintSupported] =
     useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
-  const [savedTemplates, setSavedTemplates] = useState<MealPlanTemplate[]>([]);
-  const [showTemplatesModal, setShowTemplatesModal] = useState<boolean>(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState<boolean>(false);
   const [apiKey, setApiKey] = useState<string>("");
   const [apiKeyStatus, setApiKeyStatus] = useState<
@@ -144,7 +142,6 @@ const ProfileScreen: React.FC = () => {
     void loadUserData();
     void checkBiometricSupport();
     void checkFingerprintSettings();
-    void loadSavedTemplates();
     void checkApiKey();
     void updateApiCallsRemaining();
   }, []);
@@ -351,86 +348,6 @@ const ProfileScreen: React.FC = () => {
     } catch (error) {
       console.error("Error signing out:", error);
       showSnackbar("Failed to sign out", "error");
-    }
-  };
-
-  const loadSavedTemplates = async (): Promise<void> => {
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        const templatesSnapshot = await firestore
-          .collection("mealPlanTemplates")
-          .doc(user.uid)
-          .collection("templates")
-          .orderBy("createdAt", "desc")
-          .get();
-
-        const templates = templatesSnapshot.docs.map((doc) => ({
-          ...doc.data(),
-          id: doc.id,
-        })) as MealPlanTemplate[];
-
-        setSavedTemplates(templates);
-      }
-    } catch (error) {
-      console.error("Error loading templates:", error);
-      showSnackbar("Failed to load meal plan templates", "error");
-    }
-  };
-
-  const deleteTemplate = async (templateId: string): Promise<void> => {
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        await firestore
-          .collection("mealPlanTemplates")
-          .doc(user.uid)
-          .collection("templates")
-          .doc(templateId)
-          .delete();
-
-        setSavedTemplates((prev) =>
-          prev.filter((template) => template.id !== templateId)
-        );
-        showSnackbar("Template deleted successfully");
-      }
-    } catch (error) {
-      console.error("Error deleting template:", error);
-      showSnackbar("Failed to delete template", "error");
-    }
-  };
-
-  const applyTemplate = async (templateId: string): Promise<void> => {
-    try {
-      Alert.alert(
-        "Apply Template",
-        "This will replace your current meal plan. Continue?",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Apply",
-            onPress: async () => {
-              const user = auth.currentUser;
-              if (user) {
-                const template = savedTemplates.find(
-                  (t) => t.id === templateId
-                );
-                if (template) {
-                  await firestore
-                    .collection("mealPlans")
-                    .doc(user.uid)
-                    .set(template.meals);
-                  showSnackbar("Template applied successfully!");
-                  setShowTemplatesModal(false);
-                }
-              }
-            },
-          },
-        ]
-      );
-    } catch (error) {
-      console.error("Error applying template:", error);
-      showSnackbar("Failed to apply template", "error");
     }
   };
 
@@ -644,21 +561,6 @@ const ProfileScreen: React.FC = () => {
         </Button>
       </Surface>
 
-      <Surface style={styles.section}>
-        <Title style={styles.sectionTitle}>Meal Plan Templates</Title>
-        <Text style={styles.sectionDescription}>
-          Manage your saved meal plan templates:
-        </Text>
-        <Button
-          mode="outlined"
-          onPress={() => setShowTemplatesModal(true)}
-          style={styles.actionButton}
-          icon="format-list-bulleted"
-        >
-          View Saved Templates ({savedTemplates.length})
-        </Button>
-      </Surface>
-
       {fingerprintSupported && (
         <Surface style={styles.section}>
           <View style={styles.settingContainer}>
@@ -699,54 +601,6 @@ const ProfileScreen: React.FC = () => {
         </Button>
       </View>
 
-      {/* Templates Modal */}
-      <Portal>
-        <Modal
-          visible={showTemplatesModal}
-          onDismiss={() => setShowTemplatesModal(false)}
-          contentContainerStyle={styles.modalContainer}
-        >
-          <Title style={styles.modalTitle}>Saved Templates</Title>
-          <ScrollView style={styles.templatesList}>
-            {savedTemplates.length > 0 ? (
-              savedTemplates.map((template) => (
-                <Surface key={template.id} style={styles.templateItem}>
-                  <View style={styles.templateInfo}>
-                    <Text style={styles.templateName}>{template.name}</Text>
-                    <Text style={styles.templateDate}>
-                      {new Date(template.createdAt).toLocaleDateString()}
-                    </Text>
-                  </View>
-                  <View style={styles.templateActions}>
-                    <IconButton
-                      icon="check"
-                      size={20}
-                      onPress={() => applyTemplate(template.id)}
-                      color="#4caf50"
-                    />
-                    <IconButton
-                      icon="delete"
-                      size={20}
-                      onPress={() => deleteTemplate(template.id)}
-                      color="#f44336"
-                    />
-                  </View>
-                </Surface>
-              ))
-            ) : (
-              <Text style={styles.emptyText}>No saved templates</Text>
-            )}
-          </ScrollView>
-          <Button
-            mode="contained"
-            onPress={() => setShowTemplatesModal(false)}
-            style={styles.closeButton}
-          >
-            Close
-          </Button>
-        </Modal>
-      </Portal>
-
       {/* API Key Modal */}
       <Portal>
         <Modal
@@ -757,8 +611,15 @@ const ProfileScreen: React.FC = () => {
           <Title style={styles.modalTitle}>Spoonacular API Key</Title>
           <Text style={styles.modalDescription}>
             Enter your Spoonacular API key to increase your rate limits and
-            avoid throttling. You can get a free API key at
-            spoonacular.com/food-api
+            avoid throttling. You can get a free API key at{" "}
+            <Text
+              style={styles.link}
+              onPress={() =>
+                Linking.openURL("https://spoonacular.com/food-api/console")
+              }
+            >
+              spoonacular.com/food-api
+            </Text>
           </Text>
           <TextInput
             label="API Key"

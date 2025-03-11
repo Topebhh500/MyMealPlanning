@@ -43,6 +43,8 @@ import {
   ShoppingListItem,
   MealTimesState,
 } from "../types/MealTypes";
+import ShareMealPlanButton from "../components/ShareMealPlanButton";
+import { searchRecipes, handleApiError } from "../api/spoonacular";
 
 const MealPlanScreen: React.FC = () => {
   // Core state
@@ -185,11 +187,13 @@ const MealPlanScreen: React.FC = () => {
       await saveMealPlan(updatedMealPlan);
       setMealPlan(updatedMealPlan);
     } catch (error) {
-      console.error(`Error generating ${mealType} for ${date}:`, error);
-      Alert.alert(
-        "Error",
-        error instanceof Error ? error.message : "Failed to generate meal"
-      );
+      if (__DEV__) {
+        //console.error(`Error generating ${mealType} for ${date}:`, error);
+      }
+
+      // Show user-friendly message
+      const userMessage = handleApiError(error);
+      Alert.alert("Recipe Service Error", userMessage);
     } finally {
       setIsGenerating(false);
     }
@@ -492,7 +496,11 @@ const MealPlanScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Title style={styles.title}>Meal Plan</Title>
+      <View style={styles.titleRow}>
+        <Title style={styles.title}>Meal Plan</Title>
+        <ShareMealPlanButton mealPlan={mealPlan} selectedDate={selectedDate} />
+      </View>
+
       {/* Date selector */}
       <ScrollView
         horizontal
