@@ -108,6 +108,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#323232",
     elevation: 6,
   },
+  forgotPasswordButton: {
+    marginTop: 10,
+    marginBottom: 5,
+  },
 });
 
 export default styles;

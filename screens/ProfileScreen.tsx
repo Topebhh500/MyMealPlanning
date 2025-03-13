@@ -242,15 +242,20 @@ const ProfileScreen: React.FC = () => {
     try {
       const user = auth.currentUser;
       if (user) {
-        const userData: UserData = {
+        // Create base userData object
+        const userData: Partial<UserData> = {
           name,
           allergies,
           dietaryPreferences,
           cuisinePreferences,
           mealComplexity,
           calorieGoal: parseInt(calorieGoal) || 0,
-          profilePicture: profilePicture || undefined,
         };
+
+        // Only add profilePicture if it has a value
+        if (profilePicture) {
+          userData.profilePicture = profilePicture;
+        }
 
         await firestore.collection("users").doc(user.uid).update(userData);
         showSnackbar("Profile updated successfully!", "success");

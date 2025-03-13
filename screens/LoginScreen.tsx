@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ImageBackground } from "react-native"; // Add ImageBackground import
-import { TextInput, Button, Title, Text, Snackbar } from "react-native-paper";
+import { View, StyleSheet, ImageBackground } from "react-native";
+import {
+  TextInput,
+  Button,
+  Title,
+  Text,
+  Snackbar,
+  Dialog,
+  Portal,
+} from "react-native-paper";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { auth } from "../api/firebase";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -28,6 +36,9 @@ interface LoginState {
   snackbarMessage: string;
   fingerprintEnabled: boolean;
   isLoading: boolean;
+  resetDialogVisible: boolean;
+  resetEmail: string;
+  resetLoading: boolean;
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
@@ -38,6 +49,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [snackbarMessage, setSnackbarMessage] = useState<string>("");
   const [fingerprintEnabled, setFingerprintEnabled] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [resetDialogVisible, setResetDialogVisible] = useState<boolean>(false);
+  const [resetEmail, setResetEmail] = useState<string>("");
+  const [resetLoading, setResetLoading] = useState<boolean>(false);
 
   useEffect(() => {
     void checkFingerprintSettings();
@@ -114,11 +128,43 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     }
   };
 
+  const showResetDialog = (): void => {
+    setResetEmail(email); // Pre-fill with the email from login form if available
+    setResetDialogVisible(true);
+  };
+
+  const hideResetDialog = (): void => {
+    setResetDialogVisible(false);
+  };
+
+  const handlePasswordReset = async (): Promise<void> => {
+    if (!resetEmail || !/\S+@\S+\.\S+/.test(resetEmail)) {
+      setSnackbarMessage("Please enter a valid email address");
+      setVisible(true);
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await auth.sendPasswordResetEmail(resetEmail);
+      hideResetDialog();
+      setSnackbarMessage("Password reset email sent. Check your inbox.");
+      setVisible(true);
+    } catch (error) {
+      setSnackbarMessage(
+        error instanceof Error ? error.message : "Failed to send reset email"
+      );
+      setVisible(true);
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <ImageBackground
       source={require("../assets/food-background.jpg")}
       style={styles.backgroundImage}
-      resizeMode="cover" // Add this for better image display
+      resizeMode="cover"
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
@@ -149,7 +195,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               label="Password"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry={!passwordVisible} // Toggle based on state
+              secureTextEntry={!passwordVisible}
               style={styles.input}
               mode="outlined"
               outlineColor="#6200ea"
@@ -157,9 +203,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               left={<TextInput.Icon icon="lock" color="#6200ea" />}
               right={
                 <TextInput.Icon
-                  icon={passwordVisible ? "eye-off" : "eye"} // Toggle icon
+                  icon={passwordVisible ? "eye-off" : "eye"}
                   color="#6200ea"
-                  onPress={() => setPasswordVisible(!passwordVisible)} // Toggle state
+                  onPress={() => setPasswordVisible(!passwordVisible)}
                 />
               }
             />
@@ -188,6 +234,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             )}
 
             <Button
+              onPress={showResetDialog}
+              style={styles.forgotPasswordButton}
+              labelStyle={{ color: "#6200ea" }}
+            >
+              Forgot Password?
+            </Button>
+
+            <Button
               onPress={() => navigation.navigate("Register")}
               style={styles.registerButton}
               labelStyle={styles.registerButtonText}
@@ -196,6 +250,39 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             </Button>
           </View>
         </View>
+
+        {/* Password Reset Dialog */}
+        <Portal>
+          <Dialog visible={resetDialogVisible} onDismiss={hideResetDialog}>
+            <Dialog.Title>Reset Password</Dialog.Title>
+            <Dialog.Content>
+              <Text style={{ marginBottom: 15 }}>
+                Enter your email address to receive a password reset link.
+              </Text>
+              <TextInput
+                label="Email"
+                value={resetEmail}
+                onChangeText={setResetEmail}
+                style={{ marginBottom: 10 }}
+                keyboardType="email-address"
+                mode="outlined"
+                outlineColor="#6200ea"
+                activeOutlineColor="#6200ea"
+                autoCapitalize="none"
+              />
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={hideResetDialog}>Cancel</Button>
+              <Button
+                onPress={handlePasswordReset}
+                loading={resetLoading}
+                disabled={resetLoading}
+              >
+                {resetLoading ? "Sending..." : "Send Reset Link"}
+              </Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
 
         <Snackbar
           visible={visible}
