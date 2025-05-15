@@ -45,71 +45,152 @@ This project, developed as part of a Bachelor of Business Information Technology
 
 ## Usage
 
-1. **Log In**: Sign in using Firebase Authentication.
-2. **Set Preferences**: Input dietary preferences (e.g., calories, allergies, dietary restrictions).
-3. **Plan Meals**: Use the weekly calendar to select AI-suggested recipes (e.g., "Salmon Quinoa Risotto", 405 calories).
-4. **Generate Shopping List**: Automatically create a shopping list from your meal plan.
-5. **View Nutritional Data**: Check nutritional breakdowns for each meal.
+1. **Log In**: Sign in using Firebase Authentication (`screens/LoginScreen.tsx`).
+2. **Set Preferences**: Input dietary preferences (e.g., calories, allergies, dietary restrictions) via `screens/ProfileScreen.tsx`.
+3. **Plan Meals**: Use the weekly calendar in `screens/MealPlanScreen.tsx` to select AI-suggested recipes (e.g., "Salmon Quinoa Risotto", 405 calories).
+4. **Generate Shopping List**: Automatically create a shopping list in `screens/ShoppingListScreen.tsx`.
+5. **View Nutritional Data**: Check nutritional breakdowns for each meal via `components/MealCard.tsx`.
+
+## Project Structure
+
+Below is the file structure of the project:
+
+```
+MyMealPlanning
+├─ .firebaserc                  # Firebase configuration
+├─ api                          # API integration utilities
+│ ├─ firebase.ts               # Firebase API setup
+│ ├─ RateLimiter.ts            # API rate limiting logic
+│ └─ spoonacular.ts            # Spoonacular API integration
+├─ app.json                     # Expo app configuration
+├─ App.tsx                      # Main app entry point
+├─ assets                       # Static assets for UI
+│ ├─ adaptive-icon.png
+│ ├─ default-avatar.jpg
+│ ├─ favicon.png
+│ ├─ food-background.jpg
+│ ├─ green-marker.png
+│ ├─ icon.png
+│ ├─ splash-icon.png
+│ └─ splash.png
+├─ babel.config.js              # Babel configuration
+├─ components                   # Reusable UI components
+│ ├─ DailyMealPlan.tsx
+│ ├─ IngredientsModal.tsx
+│ ├─ MealCard.tsx
+│ ├─ MealPlanConfig.tsx
+│ ├─ PasteMealModal.tsx
+│ ├─ PrepInstructionsModal.tsx
+│ └─ ShareMealPlanButton.tsx
+├─ context                      # State management (Context API)
+├─ eas.json                     # Expo Application Services configuration
+├─ firebase.json                # Firebase project settings
+├─ google-services.json         # Firebase Android configuration
+├─ index.js                     # App entry point for bundling
+├─ interfaces                   # TypeScript interfaces for repositories
+│ ├─ MealPlanRepository.ts
+│ └─ MealRecommendationGateway.ts
+├─ package-lock.json            # Dependency lock file
+├─ package.json                 # Project dependencies and scripts
+├─ README.md                    # Project documentation
+├─ screens                      # Main app screens
+│ ├─ HomeScreen.tsx
+│ ├─ LoginScreen.tsx
+│ ├─ MealPlanScreen.tsx
+│ ├─ NearbyStoresScreen.tsx
+│ ├─ ProfileScreen.tsx
+│ ├─ RegisterScreen.tsx
+│ └─ ShoppingListScreen.tsx
+├─ screenshots                  # App screenshots for documentation
+│ ├─ GenerateMealPlan.jpg
+│ ├─ LocationScreen.jpg
+│ ├─ LoginScreen.jpg
+│ ├─ MealPlan Screen.jpg
+│ ├─ ProfileScreen.jpg
+│ └─ ShoppingList.jpg
+├─ services                     # Business logic services
+│ ├─ AuthService.ts
+│ ├─ MealService.ts
+│ ├─ SharingService.ts
+│ └─ ShoppingService.ts
+├─ styles                       # Styling for screens
+│ ├─ HomeStyle.ts
+│ ├─ LoginStyle.ts
+│ ├─ MealPlanStyle.ts
+│ ├─ NearbyStoresStyle.ts
+│ ├─ ProfileStyle.ts
+│ ├─ RegisterStyle.ts
+│ ├─ ShoppingListStyle.ts
+│ └─ theme.ts
+├─ tsconfig.json                # TypeScript configuration
+├─ types                        # TypeScript type definitions
+│ ├─ MealTypes.ts
+│ └─ ShoppingTypes.ts
+└─ utils                        # Utility functions
+  ├─ DateUtils.ts
+  ├─ firebaseListeners.ts
+  └─ MealQueryHelper.ts
+```
 
 ## Project Architecture
 
-- **Cross-Platform UI Layer**: Built with React Native and Expo SDK for a seamless user interface.
-- **Application Logic Layer**: Uses Context API for state management and TypeScript for type definitions.
-- **Data & AI Services Layer**: Integrates Firebase (Authentication, Firestore) and Spoonacular API for recipe and nutritional data.
-- **Data Flow**: Unidirectional flow ensures predictable state management.
+- **Cross-Platform UI Layer**: Built with React Native (`screens/`, `components/`) and Expo SDK for a seamless user interface.
+- **Application Logic Layer**: Uses Context API (`context/`) for state management and TypeScript for type definitions (`types/`).
+- **Data & AI Services Layer**: Integrates Firebase (`api/firebase.ts`) and Spoonacular API (`api/spoonacular.ts`) for recipe and nutritional data.
+- **Data Flow**: Unidirectional flow ensures predictable state management, implemented via Context API.
 
 ## Survey Insights
 
 A survey of 56 respondents informed the app’s design:
 
-- **Challenges**: 42.9% cited time constraints, 23.2% lacked nutrition knowledge.
-- **Feature Priorities**: 80.4% desired personalized recommendations, 75.2% wanted nutritional breakdowns.
-- **Dietary Preferences**:
+- **Challenges**: 42.9% cited time constraints, 23.2% lacked nutrition knowledge (Slide 3).
+- **Feature Priorities**: 80.4% desired personalized recommendations, 75.2% wanted nutritional breakdowns (Slide 4).
+- **Dietary Preferences** (Slide 4):
   - Vegetarian: 83% wanted personalized recommendations, 79% nutritional breakdowns.
   - Vegan: 88% wanted personalized recommendations, 82% nutritional breakdowns.
   - Gluten-Free: 84% wanted personalized recommendations, 94% nutritional breakdowns.
 
 ## Implementation Challenges
 
-- **Complex API Response Typing**: Used progressive typing with incremental refinement.
-- **Component Prop Consistency**: Implemented shared interface definitions and prop validation.
-- **Handling Nutritional Data**: Created typed data transformation utilities.
-- **Reliable API Connectivity**: Added robust error handling and retry mechanisms.
-- **Supervisor Change**: New supervisor’s guidance ensured continuity mid-project.
+- **Complex API Response Typing**: Used progressive typing with incremental refinement (`types/MealTypes.ts`).
+- **Component Prop Consistency**: Implemented shared interface definitions and prop validation (`components/`).
+- **Handling Nutritional Data**: Created typed data transformation utilities (`services/MealService.ts`).
+- **Reliable API Connectivity**: Added robust error handling and retry mechanisms (`api/RateLimiter.ts`).
+- **Supervisor Change**: New supervisor’s guidance ensured continuity mid-project (Slide 11).
 
 ## Technical Results
 
-- **TypeScript Benefits**:
+- **TypeScript Benefits** (Slide 9):
   - Zero type safety errors post-migration.
   - 15% reduction in development errors (developer logs).
   - 100% component prop validation.
-- **Performance**:
+- **Performance** (Slide 9):
   - Spoonacular API latency: 1.6–1.8s (target: 1.5s).
   - Memory usage: 87–92 MB (20% reduction with FlatList).
   - API response success rate: 98%.
 
 ## User Testing
 
-Tested with 8 users via Expo Go:
+Tested with 8 users via Expo Go (Slide 10):
 
-- Weekly calendar interface: Intuitive (7/8 users).
-- AI meal recommendations: Relevant (6/8 users).
-- Shopping list generation: Time-saving (8/8 users).
+- Weekly calendar interface (`screens/MealPlanScreen.tsx`): Intuitive (7/8 users).
+- AI meal recommendations (`services/MealService.ts`): Relevant (6/8 users).
+- Shopping list generation (`screens/ShoppingListScreen.tsx`): Time-saving (8/8 users).
 - Feedback: Some users noted unclear nutritional data, aligning with the 75.2% survey emphasis on nutritional breakdowns.
 
 ## Contributions
 
-- **Typed API Integration Pattern**: A reusable model for integrating external AI services.
-- **Progressive TypeScript Migration Strategy**: A practical approach for educational projects.
+- **Typed API Integration Pattern**: A reusable model for integrating external AI services (`api/`).
+- **Progressive TypeScript Migration Strategy**: A practical approach for educational projects (`tsconfig.json`, `types/`).
 - **Educational Framework**: A blueprint for health tech apps in academic settings.
 - **Skill Development**: Enhanced expertise in React Native, TypeScript, and AI integration.
 
 ## Future Work
 
-- Advanced nutritional analysis across meal plans.
+- Advanced nutritional analysis across meal plans (`services/MealService.ts`).
 - Inventory management for pantry tracking.
-- AI-driven meal plan optimization.
-- Recipe customization for greater user personalization.
+- AI-driven meal plan optimization (`api/spoonacular.ts`).
+- Recipe customization for greater user personalization (`components/MealCard.tsx`).
 
 ## License
 
@@ -120,84 +201,3 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 - **Author**: Temitope Ajayi
 - **GitHub**: [Topebhh500](https://github.com/Topebhh500)
 - **Email**: Contact via GitHub issues for inquiries.
-
-## Project Tree
-
-MyMealPlanning
-├─ .firebaserc
-├─ api
-│ ├─ firebase.ts
-│ ├─ RateLimiter.ts
-│ └─ spoonacular.ts
-├─ app.json
-├─ App.tsx
-├─ assets
-│ ├─ adaptive-icon.png
-│ ├─ default-avatar.jpg
-│ ├─ favicon.png
-│ ├─ food-background.jpg
-│ ├─ green-marker.png
-│ ├─ icon.png
-│ ├─ splash-icon.png
-│ └─ splash.png
-├─ babel.config.js
-├─ components
-│ ├─ DailyMealPlan.tsx
-│ ├─ IngredientsModal.tsx
-│ ├─ MealCard.tsx
-│ ├─ MealPlanConfig.tsx
-│ ├─ PasteMealModal.tsx
-│ ├─ PrepInstructionsModal.tsx
-│ └─ ShareMealPlanButton.tsx
-├─ context
-├─ eas.json
-├─ firebase.json
-├─ google-services.json
-├─ index.js
-├─ interfaces
-│ ├─ MealPlanRepository.ts
-│ └─ MealRecommendationGateway.ts
-├─ package-lock.json
-├─ package.json
-├─ README.md
-├─ screens
-│ ├─ HomeScreen.tsx
-│ ├─ LoginScreen.tsx
-│ ├─ MealPlanScreen.tsx
-│ ├─ NearbyStoresScreen.tsx
-│ ├─ ProfileScreen.tsx
-│ ├─ RegisterScreen.tsx
-│ └─ ShoppingListScreen.tsx
-├─ screenshots
-│ ├─ GenerateMealPlan.jpg
-│ ├─ LocationScreen.jpg
-│ ├─ LoginScreen.jpg
-│ ├─ MealPlan Screen.jpg
-│ ├─ ProfileScreen.jpg
-│ └─ ShoppingList.jpg
-├─ services
-│ ├─ AuthService.ts
-│ ├─ MealService.ts
-│ ├─ SharingService.ts
-│ └─ ShoppingService.ts
-├─ styles
-│ ├─ HomeStyle.ts
-│ ├─ LoginStyle.ts
-│ ├─ MealPlanStyle.ts
-│ ├─ NearbyStoresStyle.ts
-│ ├─ ProfileStyle.ts
-│ ├─ RegisterStyle.ts
-│ ├─ ShoppingListStyle.ts
-│ └─ theme.ts
-├─ tsconfig.json
-├─ types
-│ ├─ MealTypes.ts
-│ └─ ShoppingTypes.ts
-└─ utils
-├─ DateUtils.ts
-├─ firebaseListeners.ts
-└─ MealQueryHelper.ts
-
-```
-
-```
