@@ -1,21 +1,47 @@
 // services/MealService.ts
-import { Alert } from "react-native";
-import { auth, firestore } from "../api/firebase";
-import {
-  searchRecipes,
-  getRecipeInformation,
-  getRecipeInstructions,
-} from "../api/spoonacular";
 import { Meal, UserPreferences, MealPlan } from "../types/MealTypes";
 import { getMealQueries } from "../utils/MealQueryHelper";
 import { withRetry } from "../api/RateLimiter";
+
+// Define gateway interfaces (these should be moved to separate files: interfaces/MealRecommendationGateway.ts and interfaces/MealPlanRepository.ts)
+// For now, included here for completeness; you'll move them later
+interface MealRecommendationGateway {
+  searchRecipes(
+    query: string,
+    params: SearchParams
+  ): Promise<Array<{ recipe: any }>>;
+  getRecipeInstructions(
+    id: number
+  ): Promise<{ steps: { number: number; step: string }[] }>;
+}
+
+interface MealPlanRepository {
+  saveMealPlan(userId: string, mealPlan: MealPlan): Promise<void>;
+  createMealPlanTemplate(
+    userId: string,
+    mealPlan: MealPlan,
+    templateName: string
+  ): Promise<void>;
+  loadMealPlanTemplate(userId: string, templateId: string): Promise<MealPlan>;
+  getMealPlan(userId: string): Promise<MealPlan | null>;
+  updateMealPlan(userId: string, mealPlan: MealPlan): Promise<void>;
+}
+
+interface SearchParams {
+  mealType?: string;
+  calories?: number;
+  diet?: string;
+  health?: string[];
+  excluded?: string[];
+}
 
 /**
  * Generate a random meal based on user preferences
  */
 export const getRandomMeal = async (
   mealType: string,
-  userPreferences: UserPreferences
+  userPreferences: UserPreferences,
+  gateway: MealRecommendationGateway
 ): Promise<Meal> => {
   try {
     const mealCalorieDistribution = {
@@ -28,113 +54,68 @@ export const getRandomMeal = async (
       userPreferences.calorieGoal * mealCalorieDistribution[mealType]
     );
 
-    // Setup base query parameters
-    let queryParams = {
+    let queryParams: SearchParams = {
       mealType: mealType.toLowerCase(),
       calories: targetCalories,
-      health: [] as string[],
-      excluded: [] as string[],
-      cuisines: userPreferences.cuisinePreferences || [],
-      maxReadyTime: getMaxReadyTimeByComplexity(userPreferences.mealComplexity),
+      health: [],
+      excluded: [],
     };
 
-    // Add dietary preferences
     if (userPreferences.dietaryPreferences) {
-      if (userPreferences.dietaryPreferences.includes("Vegetarian")) {
-        queryParams.health.push("vegetarian");
-      }
-      if (userPreferences.dietaryPreferences.includes("Vegan")) {
-        queryParams.health.push("vegan");
-      }
-      if (userPreferences.dietaryPreferences.includes("Low-Carb")) {
+      if (userPreferences.dietaryPreferences.includes("Vegetarian"))
+        queryParams.health!.push("vegetarian");
+      if (userPreferences.dietaryPreferences.includes("Vegan"))
+        queryParams.health!.push("vegan");
+      if (userPreferences.dietaryPreferences.includes("Low-Carb"))
         queryParams.diet = "low-carb";
-      }
-      if (userPreferences.dietaryPreferences.includes("High-Protein")) {
+      if (userPreferences.dietaryPreferences.includes("High-Protein"))
         queryParams.diet = "high-protein";
-      }
     }
 
-    // Add allergy restrictions
     if (userPreferences.allergies) {
-      userPreferences.allergies.forEach((allergy) => {
-        queryParams.excluded.push(allergy.toLowerCase());
-      });
+      queryParams.excluded = userPreferences.allergies.map((allergy) =>
+        allergy.toLowerCase()
+      );
     }
 
     const queries = getMealQueries(userPreferences.dietaryPreferences || []);
-    const mealOptions = queries[mealType];
+    const mealOptions = queries[mealType as keyof typeof queries];
     const randomQuery =
       mealOptions[Math.floor(Math.random() * mealOptions.length)];
 
-    // Try with all preferences first
-    let results = await withRetry(async () => {
-      return searchRecipes(randomQuery, queryParams);
-    });
-
-    // If no results, try with just the meal type and allergies (remove dietary restrictions)
+    let results = await withRetry(() =>
+      gateway.searchRecipes(randomQuery, queryParams)
+    );
     if (!results || results.length === 0) {
-      console.log(
-        `No results with full preferences, trying with fewer restrictions...`
+      results = await withRetry(() =>
+        gateway.searchRecipes(randomQuery, {
+          ...queryParams,
+          diet: undefined,
+          health: [],
+        })
       );
-
-      const simplifiedParams = {
-        ...queryParams,
-        diet: undefined,
-        health: [] as string[],
-      };
-
-      results = await withRetry(async () => {
-        return searchRecipes(randomQuery, simplifiedParams);
-      });
     }
-
-    // If still no results, try with just meal type (no dietary restrictions or allergies)
     if (!results || results.length === 0) {
-      console.log(`Still no results, trying with minimal restrictions...`);
-
-      const minimalParams = {
-        mealType: mealType.toLowerCase(),
-        calories: targetCalories,
-      };
-
-      results = await withRetry(async () => {
-        return searchRecipes(randomQuery, minimalParams);
-      });
-    }
-
-    // If we still don't have results, try a completely generic search
-    if (!results || results.length === 0) {
-      console.log(`Last attempt with generic search...`);
-
-      results = await withRetry(async () => {
-        return searchRecipes(mealType, {});
-      });
-    }
-
-    if (!results || results.length === 0) {
-      throw new Error(
-        `Unable to find ${mealType} recipes. Please check your internet connection or try again later.`
+      results = await withRetry(() =>
+        gateway.searchRecipes(randomQuery, {
+          mealType: mealType.toLowerCase(),
+          calories: targetCalories,
+        })
       );
+    }
+    if (!results || results.length === 0) {
+      results = await withRetry(() => gateway.searchRecipes(mealType, {}));
+    }
+
+    if (!results || results.length === 0) {
+      throw new Error(`Unable to find ${mealType} recipes.`);
     }
 
     const selectedRecipe =
       results[Math.floor(Math.random() * results.length)].recipe;
-
-    // Fetch detailed instructions if available
-    let instructions = [];
-    if (selectedRecipe.id) {
-      try {
-        const recipeInstructions = await withRetry(() =>
-          getRecipeInstructions(selectedRecipe.id)
-        );
-        instructions = recipeInstructions.steps;
-      } catch (error) {
-        console.error(
-          `Error fetching instructions for recipe ${selectedRecipe.id}:`,
-          error
-        );
-      }
-    }
+    const instructions = await withRetry(() =>
+      gateway.getRecipeInstructions(selectedRecipe.id || 0)
+    ).catch(() => ({ steps: [] }));
 
     return {
       id: selectedRecipe.id,
@@ -149,21 +130,17 @@ export const getRandomMeal = async (
       source: selectedRecipe.source || "",
       totalTime: selectedRecipe.totalTime || 0,
       foodCategory: selectedRecipe.foodCategory || null,
-      instructions: instructions,
+      instructions: instructions.steps,
     };
   } catch (error) {
     console.error(`Error getting ${mealType} recipe:`, error);
-
-    // Provide a more user-friendly error message
-    if (error.message && error.message.includes("Unable to find")) {
-      throw new Error(
-        `Unable to find ${mealType} recipes matching your preferences. Try adjusting your dietary restrictions.`
-      );
-    } else {
-      throw new Error(
-        `Failed to get ${mealType} recipe. Please check your internet connection and try again.`
-      );
-    }
+    throw error instanceof Error && error.message.includes("Unable to find")
+      ? new Error(
+          `Unable to find ${mealType} recipes matching your preferences. Try adjusting your dietary restrictions.`
+        )
+      : new Error(
+          `Failed to get ${mealType} recipe. Please check your internet connection and try again.`
+        );
   }
 };
 
@@ -180,21 +157,19 @@ const getMaxReadyTimeByComplexity = (complexity?: string): number => {
   }
 };
 
-// Other functions in MealService remain the same...
-
 /**
- * Save meal plan to Firebase
+ * Save meal plan to storage
  */
-export const saveMealPlan = async (mealPlan: MealPlan): Promise<void> => {
+export const saveMealPlan = async (
+  mealPlan: MealPlan,
+  repository: MealPlanRepository,
+  userId: string
+): Promise<void> => {
   try {
-    const user = auth.currentUser;
-    if (user) {
-      await firestore.collection("mealPlans").doc(user.uid).set(mealPlan);
-    }
+    await repository.saveMealPlan(userId, mealPlan);
   } catch (error) {
     console.error("Error saving meal plan:", error);
-    Alert.alert("Error", "Failed to save meal plan. Please try again.");
-    throw error;
+    throw error; // Let the UI layer handle user feedback
   }
 };
 
@@ -203,26 +178,14 @@ export const saveMealPlan = async (mealPlan: MealPlan): Promise<void> => {
  */
 export const createMealPlanTemplate = async (
   mealPlan: MealPlan,
-  templateName: string
+  templateName: string,
+  repository: MealPlanRepository,
+  userId: string
 ): Promise<void> => {
   try {
-    const user = auth.currentUser;
-    if (user) {
-      const templateRef = firestore
-        .collection("mealPlanTemplates")
-        .doc(user.uid)
-        .collection("templates")
-        .doc();
-
-      await templateRef.set({
-        name: templateName,
-        meals: mealPlan,
-        createdAt: new Date(),
-      });
-    }
+    await repository.createMealPlanTemplate(userId, mealPlan, templateName);
   } catch (error) {
     console.error("Error creating template:", error);
-    Alert.alert("Error", "Failed to create template. Please try again.");
     throw error;
   }
 };
@@ -232,58 +195,29 @@ export const createMealPlanTemplate = async (
  */
 export const generateShoppingListFromMealPlan = async (
   mealPlan: MealPlan
-): Promise<string[]> => {
-  try {
-    // Get all recipes from the meal plan
-    const allMeals: Meal[] = [];
-
-    // Extract all meals from the plan
-    Object.values(mealPlan).forEach((dayPlan) => {
-      if (dayPlan.breakfast) allMeals.push(dayPlan.breakfast);
-      if (dayPlan.lunch) allMeals.push(dayPlan.lunch);
-      if (dayPlan.dinner) allMeals.push(dayPlan.dinner);
+): Promise<ShoppingItem[]> => {
+  const ingredientsSet = new Set<string>();
+  Object.values(mealPlan).forEach((dayPlan) => {
+    Object.values(dayPlan).forEach((meal) => {
+      meal.ingredients.forEach((ingredient) => ingredientsSet.add(ingredient));
     });
-
-    // Collect all ingredients
-    const ingredientSet = new Set<string>();
-    allMeals.forEach((meal) => {
-      meal.ingredients.forEach((ingredient) => {
-        ingredientSet.add(ingredient);
-      });
-    });
-
-    return Array.from(ingredientSet);
-  } catch (error) {
-    console.error("Error generating shopping list:", error);
-    throw error;
-  }
+  });
+  return Array.from(ingredientsSet).map((name) => ({ name, checked: false }));
 };
 
 /**
  * Load a meal plan template and apply it to the current meal plan
  */
 export const loadMealPlanTemplate = async (
-  templateId: string
+  templateId: string,
+  repository: MealPlanRepository,
+  userId: string
 ): Promise<MealPlan> => {
   try {
-    const user = auth.currentUser;
-    if (!user) {
-      throw new Error("User not authenticated");
-    }
-
-    const templateDoc = await firestore
-      .collection("mealPlanTemplates")
-      .doc(user.uid)
-      .collection("templates")
-      .doc(templateId)
-      .get();
-
-    if (!templateDoc.exists) {
-      throw new Error("Template not found");
-    }
-
-    const template = templateDoc.data() as MealPlanTemplate;
-    return template.meals;
+    if (!userId) throw new Error("User not authenticated");
+    const mealPlan = await repository.loadMealPlanTemplate(userId, templateId);
+    if (!mealPlan) throw new Error("Template not found");
+    return mealPlan;
   } catch (error) {
     console.error("Error loading template:", error);
     throw error;
@@ -296,36 +230,22 @@ export const loadMealPlanTemplate = async (
 export const updateMeal = async (
   date: string,
   mealType: string,
-  meal: Meal
+  meal: Meal,
+  repository: MealPlanRepository,
+  userId: string
 ): Promise<void> => {
   try {
-    const user = auth.currentUser;
-    if (!user) {
-      throw new Error("User not authenticated");
-    }
+    if (!userId) throw new Error("User not authenticated");
 
-    // Get current meal plan
-    const mealPlanDoc = await firestore
-      .collection("mealPlans")
-      .doc(user.uid)
-      .get();
+    const currentMealPlan = await repository.getMealPlan(userId);
+    if (!currentMealPlan) throw new Error("Meal plan not found");
 
-    if (!mealPlanDoc.exists) {
-      throw new Error("Meal plan not found");
-    }
+    const updatedMealPlan = { ...currentMealPlan };
+    if (!updatedMealPlan[date]) updatedMealPlan[date] = {};
+    updatedMealPlan[date][mealType as keyof (typeof updatedMealPlan)[string]] =
+      meal;
 
-    const mealPlan = mealPlanDoc.data() as MealPlan;
-
-    // Create date entry if it doesn't exist
-    if (!mealPlan[date]) {
-      mealPlan[date] = {};
-    }
-
-    // Update specific meal
-    mealPlan[date][mealType] = meal;
-
-    // Save updated meal plan
-    await saveMealPlan(mealPlan);
+    await repository.updateMealPlan(userId, updatedMealPlan);
   } catch (error) {
     console.error("Error updating meal:", error);
     throw error;
@@ -352,17 +272,12 @@ export const getMealPlanStats = (
     let totalFat = 0;
     let mealCount = 0;
 
-    // Convert dates to timestamps for comparison
     const start = new Date(startDate).getTime();
     const end = new Date(endDate).getTime();
 
-    // Iterate through meal plan
     Object.entries(mealPlan).forEach(([dateStr, dayPlan]) => {
       const dateTime = new Date(dateStr).getTime();
-
-      // Check if date is in range
       if (dateTime >= start && dateTime <= end) {
-        // Add breakfast stats if exists
         if (dayPlan.breakfast) {
           totalCalories += dayPlan.breakfast.calories || 0;
           totalProtein += dayPlan.breakfast.protein || 0;
@@ -370,8 +285,6 @@ export const getMealPlanStats = (
           totalFat += dayPlan.breakfast.fat || 0;
           mealCount++;
         }
-
-        // Add lunch stats if exists
         if (dayPlan.lunch) {
           totalCalories += dayPlan.lunch.calories || 0;
           totalProtein += dayPlan.lunch.protein || 0;
@@ -379,8 +292,6 @@ export const getMealPlanStats = (
           totalFat += dayPlan.lunch.fat || 0;
           mealCount++;
         }
-
-        // Add dinner stats if exists
         if (dayPlan.dinner) {
           totalCalories += dayPlan.dinner.calories || 0;
           totalProtein += dayPlan.dinner.protein || 0;
@@ -391,17 +302,11 @@ export const getMealPlanStats = (
       }
     });
 
-    // Calculate averages (prevent division by zero)
     const avgProtein = mealCount > 0 ? Math.round(totalProtein / mealCount) : 0;
     const avgCarbs = mealCount > 0 ? Math.round(totalCarbs / mealCount) : 0;
     const avgFat = mealCount > 0 ? Math.round(totalFat / mealCount) : 0;
 
-    return {
-      totalCalories,
-      avgProtein,
-      avgCarbs,
-      avgFat,
-    };
+    return { totalCalories, avgProtein, avgCarbs, avgFat };
   } catch (error) {
     console.error("Error calculating meal plan stats:", error);
     return { totalCalories: 0, avgProtein: 0, avgCarbs: 0, avgFat: 0 };

@@ -15,24 +15,14 @@ import {
   Portal,
   Text,
   Checkbox,
-  Menu,
 } from "react-native-paper";
 import { TabView, SceneMap, NavigationState } from "react-native-tab-view";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { firestore, auth } from "../api/firebase";
+import { FirebaseRepository } from "../api/firebase";
 import styles from "../styles/ShoppingListStyle";
+import { ShoppingItem, StockItem } from "../types/MealTypes"; // Adjust import if types are elsewhere
 
 // Interfaces
-interface ShoppingItem {
-  name: string;
-  checked: boolean;
-}
-
-interface StockItem {
-  name: string;
-  quantity: number;
-}
-
 interface Route {
   key: string;
   title: string;
@@ -158,69 +148,66 @@ const ShoppingListScreen: React.FC = () => {
     { key: "shoppingList", title: "Items to Buy" },
     { key: "stock", title: "Available Stock" },
   ]);
-  const [menuVisible, setMenuVisible] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string>("");
+
+  const firebaseRepository = new FirebaseRepository();
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    // Set up real-time listeners
-    const unsubscribeShoppingList = firestore
-      .collection("shoppingLists")
-      .doc(user.uid)
-      .onSnapshot(
-        (doc) => {
-          if (doc.exists) {
-            setShoppingList(doc.data()?.items || []);
-          } else {
-            setShoppingList([]);
-          }
-        },
-        (error) => {
-          console.error("Error in shopping list listener:", error);
-          Alert.alert("Error", "Failed to sync shopping list data");
+    const unsubscribeAuth = firebaseRepository
+      .auth()
+      .onAuthStateChanged((user) => {
+        setUserId(user?.uid || "");
+        if (!user) {
+          Alert.alert(
+            "Authentication Required",
+            "Please log in to access your shopping list."
+          );
         }
-      );
+      });
 
-    const unsubscribeStock = firestore
-      .collection("stocks")
-      .doc(user.uid)
-      .onSnapshot(
-        (doc) => {
-          if (doc.exists) {
-            setStock(doc.data()?.items || []);
-          } else {
-            setStock([]);
-          }
-        },
-        (error) => {
-          console.error("Error in stock listener:", error);
-          Alert.alert("Error", "Failed to sync stock data");
-        }
-      );
+    return () => unsubscribeAuth();
+  }, []);
 
-    // Clean up listeners on unmount
+  useEffect(() => {
+    if (!userId) return;
+
+    const unsubscribeShoppingList = firebaseRepository.getShoppingListRealtime(
+      userId,
+      (items) => setShoppingList(items),
+      (error) => {
+        console.error("Error in shopping list listener:", error);
+        Alert.alert("Error", "Failed to sync shopping list data");
+      }
+    );
+
+    const unsubscribeStock = firebaseRepository.getStockRealtime(
+      userId,
+      (items) => setStock(items),
+      (error) => {
+        console.error("Error in stock listener:", error);
+        Alert.alert("Error", "Failed to sync stock data");
+      }
+    );
+
     return () => {
       unsubscribeShoppingList();
       unsubscribeStock();
     };
-  }, []);
+  }, [userId]);
 
-  const saveToFirebase = async (
-    collection: string,
-    items: ShoppingItem[] | StockItem[]
-  ): Promise<void> => {
+  const saveShoppingList = async (items: ShoppingItem[]): Promise<void> => {
     try {
-      const user = auth.currentUser;
-      if (user) {
-        await firestore.collection(collection).doc(user.uid).set({ items });
-      }
+      await firebaseRepository.saveShoppingList(userId, items);
     } catch (error) {
-      throw new Error(
-        `Error saving to ${collection}: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      throw new Error(`Error saving shopping list: ${error.message}`);
+    }
+  };
+
+  const saveStock = async (items: StockItem[]): Promise<void> => {
+    try {
+      await firebaseRepository.saveStock(userId, items);
+    } catch (error) {
+      throw new Error(`Error saving stock: ${error.message}`);
     }
   };
 
@@ -231,8 +218,7 @@ const ShoppingListScreen: React.FC = () => {
           ...shoppingList,
           { name: newItem.trim(), checked: false },
         ];
-        await saveToFirebase("shoppingLists", updatedList);
-        setShoppingList(updatedList);
+        await saveShoppingList(updatedList);
         setNewItem("");
       } catch (error) {
         Alert.alert("Error", "Failed to add item");
@@ -245,8 +231,7 @@ const ShoppingListScreen: React.FC = () => {
       const updatedList = shoppingList.map((item, i) =>
         i === index ? { ...item, checked: !item.checked } : item
       );
-      await saveToFirebase("shoppingLists", updatedList);
-      setShoppingList(updatedList);
+      await saveShoppingList(updatedList);
     } catch (error) {
       Alert.alert("Error", "Failed to update item");
     }
@@ -255,8 +240,7 @@ const ShoppingListScreen: React.FC = () => {
   const removeShoppingItem = async (index: number): Promise<void> => {
     try {
       const updatedList = shoppingList.filter((_, i) => i !== index);
-      await saveToFirebase("shoppingLists", updatedList);
-      setShoppingList(updatedList);
+      await saveShoppingList(updatedList);
     } catch (error) {
       Alert.alert("Error", "Failed to remove item");
     }
@@ -268,14 +252,10 @@ const ShoppingListScreen: React.FC = () => {
         (listItem) => listItem.name !== item.name
       );
       const updatedStock = [...stock, { name: item.name, quantity: 1 }];
-
       await Promise.all([
-        saveToFirebase("shoppingLists", updatedShoppingList),
-        saveToFirebase("stocks", updatedStock),
+        saveShoppingList(updatedShoppingList),
+        saveStock(updatedStock),
       ]);
-
-      setShoppingList(updatedShoppingList);
-      setStock(updatedStock);
     } catch (error) {
       Alert.alert("Error", "Failed to move item to stock");
     }
@@ -298,8 +278,7 @@ const ShoppingListScreen: React.FC = () => {
       const updatedStock = stock.map((item) =>
         item === selectedItem ? { ...item, quantity } : item
       );
-      await saveToFirebase("stocks", updatedStock);
-      setStock(updatedStock);
+      await saveStock(updatedStock);
       setEditDialogVisible(false);
     } catch (error) {
       Alert.alert("Error", "Failed to update quantity");
@@ -309,41 +288,25 @@ const ShoppingListScreen: React.FC = () => {
   const removeStockItem = async (item: StockItem): Promise<void> => {
     try {
       const updatedStock = stock.filter((stockItem) => stockItem !== item);
-      await saveToFirebase("stocks", updatedStock);
-      setStock(updatedStock);
+      await saveStock(updatedStock);
     } catch (error) {
       Alert.alert("Error", "Failed to remove item");
     }
   };
 
-  // New function to clear the shopping list
   const clearShoppingList = async (): Promise<void> => {
     try {
-      // Show confirmation dialog before clearing
       Alert.alert(
         "Clear Shopping List",
         "Are you sure you want to remove all items from your shopping list?",
         [
-          {
-            text: "Cancel",
-            style: "cancel",
-          },
+          { text: "Cancel", style: "cancel" },
           {
             text: "Clear All",
             style: "destructive",
             onPress: async () => {
-              const user = auth.currentUser;
-              if (user) {
-                // Update Firestore with empty array
-                await firestore
-                  .collection("shoppingLists")
-                  .doc(user.uid)
-                  .set({ items: [] });
-
-                // Update local state
-                setShoppingList([]);
-                Alert.alert("Success", "Shopping list cleared successfully");
-              }
+              await saveShoppingList([]);
+              Alert.alert("Success", "Shopping list cleared successfully");
             },
           },
         ]
@@ -402,10 +365,10 @@ const ShoppingListScreen: React.FC = () => {
     <View style={styles.mainContainer}>
       <View style={styles.headerContainer}>
         <Text style={styles.screenTitle}>Shopping List</Text>
-        {index === 0 && ( // Only show clear button on shopping list tab
+        {index === 0 && (
           <IconButton
             icon="trash-can-outline"
-            color="#FFOOOO"
+            color="#FF0000" // Fixed typo from #FFOOOO
             size={24}
             onPress={clearShoppingList}
           />

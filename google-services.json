@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "926443553913",
+    "project_id": "my-meal-planning-b09b8",
+    "storage_bucket": "my-meal-planning-b09b8.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:926443553913:android:d048b995368378477100a8",
+        "android_client_info": {
+          "package_name": "com.bhh500.MyMealPlanning"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzyQ696Sh7OYp7op2OsTk7869ctPWYTOE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

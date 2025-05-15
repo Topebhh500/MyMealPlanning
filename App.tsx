@@ -114,46 +114,55 @@ function MainTabs(): JSX.Element {
 }
 
 export default function App(): JSX.Element {
-  const [initializing, setInitializing] = useState<boolean>(true);
-  const [user, setUser] = useState<User | null>(null);
+  try {
+    const [initializing, setInitializing] = useState<boolean>(true);
+    const [user, setUser] = useState<User | null>(null);
 
-  function onAuthStateChanged(user: User | null): void {
-    setUser(user);
-    if (initializing) setInitializing(false);
+    function onAuthStateChanged(user: User | null): void {
+      setUser(user);
+      if (initializing) setInitializing(false);
+    }
+
+    useEffect(() => {
+      initializeRateLimiter();
+      const subscriber = auth.onAuthStateChanged(onAuthStateChanged);
+      return subscriber; // Unsubscribe on unmount
+    }, []);
+
+    if (initializing) return null;
+
+    return (
+      <PaperProvider>
+        <NavigationContainer>
+          {user ? (
+            // Stack navigator for authenticated users
+            <Stack.Navigator>
+              <Stack.Screen
+                name="Main"
+                component={MainTabs}
+                options={{ headerShown: false }}
+              />
+            </Stack.Navigator>
+          ) : (
+            // Stack navigator for unauthenticated users (login flow)
+            <Stack.Navigator>
+              <Stack.Screen
+                name="Login"
+                component={LoginScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen name="Register" component={RegisterScreen} />
+            </Stack.Navigator>
+          )}
+        </NavigationContainer>
+      </PaperProvider>
+    );
+  } catch (error) {
+    console.error("App failed to start:", error);
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>Something went wrong: {error.toString()}</Text>
+      </View>
+    );
   }
-
-  useEffect(() => {
-    initializeRateLimiter();
-    const subscriber = auth.onAuthStateChanged(onAuthStateChanged);
-    return subscriber; // Unsubscribe on unmount
-  }, []);
-
-  if (initializing) return null;
-
-  return (
-    <PaperProvider>
-      <NavigationContainer>
-        {user ? (
-          // Stack navigator for authenticated users
-          <Stack.Navigator>
-            <Stack.Screen
-              name="Main"
-              component={MainTabs}
-              options={{ headerShown: false }}
-            />
-          </Stack.Navigator>
-        ) : (
-          // Stack navigator for unauthenticated users (login flow)
-          <Stack.Navigator>
-            <Stack.Screen
-              name="Login"
-              component={LoginScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-          </Stack.Navigator>
-        )}
-      </NavigationContainer>
-    </PaperProvider>
-  );
 }

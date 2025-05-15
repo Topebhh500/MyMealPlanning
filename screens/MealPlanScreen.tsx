@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { View, ScrollView, TouchableOpacity, Image, Alert } from "react-native";
+import { View, ScrollView, TouchableOpacity, Alert } from "react-native";
 import {
   Title,
-  Card,
   Button,
   Modal,
   Portal,
@@ -12,13 +11,12 @@ import {
   Checkbox,
   ActivityIndicator,
 } from "react-native-paper";
-import { auth, firestore } from "../api/firebase";
 import styles from "../styles/MealPlanStyle";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Import components
 import MealCard from "../components/MealCard";
 import PasteMealModal from "../components/PasteMealModal";
+import ShareMealPlanButton from "../components/ShareMealPlanButton";
 
 // Import services
 import {
@@ -27,6 +25,12 @@ import {
   createMealPlanTemplate,
   generateShoppingListFromMealPlan,
 } from "../services/MealService";
+
+// Import gateways and repositories
+import { SpoonacularGateway } from "../api/spoonacular";
+import { MealPlanRepository } from "../interfaces/MealPlanRepository";
+import { MealRecommendationGateway } from "../interfaces/MealRecommendationGateway";
+import { FirebaseRepository } from "../api/firebase";
 
 // Import utilities
 import {
@@ -40,11 +44,9 @@ import {
   UserPreferences,
   Meal,
   MealPlan,
-  ShoppingListItem,
+  ShoppingItem, // Updated to ShoppingItem
   MealTimesState,
 } from "../types/MealTypes";
-import ShareMealPlanButton from "../components/ShareMealPlanButton";
-import { searchRecipes, handleApiError } from "../api/spoonacular";
 
 const MealPlanScreen: React.FC = () => {
   // Core state
@@ -55,6 +57,7 @@ const MealPlanScreen: React.FC = () => {
     allergies: [],
     dietaryPreferences: [],
   });
+  const [userId, setUserId] = useState<string>("");
 
   // Modal states
   const [isIngredientsModalVisible, setIsIngredientsModalVisible] =
@@ -91,14 +94,45 @@ const MealPlanScreen: React.FC = () => {
 
   // Shopping list and ingredients states
   const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
-  const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
+  const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]); // Updated to ShoppingItem
 
   // Meal Instructions
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
 
+  // Instantiate gateways and repositories
+  const spoonacularGateway: MealRecommendationGateway =
+    new SpoonacularGateway();
+  const firebaseRepository: MealPlanRepository = new FirebaseRepository();
+
+  // Listen to authentication state changes
   useEffect(() => {
-    loadInitialData();
+    const unsubscribe = firebaseRepository.auth().onAuthStateChanged((user) => {
+      setUserId(user?.uid || "");
+      if (!user) {
+        Alert.alert(
+          "Authentication Required",
+          "Please log in to access your meal plan."
+        );
+      }
+    });
+    return () => unsubscribe();
   }, []);
+
+  // Load initial data when userId is set
+  useEffect(() => {
+    if (userId) loadInitialData();
+  }, [userId]);
+
+  // Real-time sync for shopping list
+  useEffect(() => {
+    if (!userId) return;
+    const unsubscribe = firebaseRepository.getShoppingListRealtime(
+      userId,
+      (items) => setShoppingList(items),
+      (error) => console.error("Shopping list sync error:", error)
+    );
+    return () => unsubscribe();
+  }, [userId]);
 
   const loadInitialData = async () => {
     try {
@@ -115,18 +149,12 @@ const MealPlanScreen: React.FC = () => {
 
   const loadUserPreferences = async () => {
     try {
-      const user = auth.currentUser;
-      if (user) {
-        const doc = await firestore.collection("users").doc(user.uid).get();
-        if (doc.exists) {
-          const userData = doc.data() as UserPreferences;
-          setUserPreferences({
-            calorieGoal: userData.calorieGoal || 2000,
-            allergies: userData.allergies || [],
-            dietaryPreferences: userData.dietaryPreferences || [],
-          });
-        }
-      }
+      const userData = await firebaseRepository.getUserPreferences(userId);
+      setUserPreferences({
+        calorieGoal: userData?.calorieGoal || 2000,
+        allergies: userData?.allergies || [],
+        dietaryPreferences: userData?.dietaryPreferences || [],
+      });
     } catch (error) {
       console.error("Error loading user preferences:", error);
       throw error;
@@ -135,17 +163,12 @@ const MealPlanScreen: React.FC = () => {
 
   const loadMealPlan = async () => {
     try {
-      const user = auth.currentUser;
-      if (user) {
-        const doc = await firestore.collection("mealPlans").doc(user.uid).get();
-        if (doc.exists) {
-          const storedMealPlan = doc.data() as MealPlan;
-          setMealPlan(storedMealPlan);
-          setSelectedDate(getFormattedDate(new Date()));
-        } else {
-          // If no meal plan exists yet, set today as selected date
-          setSelectedDate(getFormattedDate(new Date()));
-        }
+      const storedMealPlan = await firebaseRepository.getMealPlan(userId);
+      if (storedMealPlan) {
+        setMealPlan(storedMealPlan);
+        setSelectedDate(getFormattedDate(new Date()));
+      } else {
+        setSelectedDate(getFormattedDate(new Date()));
       }
     } catch (error) {
       console.error("Error loading meal plan:", error);
@@ -155,16 +178,8 @@ const MealPlanScreen: React.FC = () => {
 
   const loadShoppingList = async () => {
     try {
-      const user = auth.currentUser;
-      if (user) {
-        const snapshot = await firestore
-          .collection("shoppingLists")
-          .doc(user.uid)
-          .get();
-        if (snapshot.exists) {
-          setShoppingList(snapshot.data()?.items || []);
-        }
-      }
+      const storedList = await firebaseRepository.getShoppingList(userId);
+      setShoppingList(storedList || []);
     } catch (error) {
       console.error("Error loading shopping list:", error);
       throw error;
@@ -175,25 +190,22 @@ const MealPlanScreen: React.FC = () => {
   const generateMeal = async (date: string, mealType: string) => {
     try {
       setIsGenerating(true);
-      const newMeal = await getRandomMeal(mealType, userPreferences);
-
+      const newMeal = await getRandomMeal(
+        mealType,
+        userPreferences,
+        spoonacularGateway
+      );
       const updatedMealPlan = { ...mealPlan };
-      if (!updatedMealPlan[date]) {
-        updatedMealPlan[date] = {};
-      }
-
+      if (!updatedMealPlan[date]) updatedMealPlan[date] = {};
       updatedMealPlan[date][mealType] = newMeal;
-
-      await saveMealPlan(updatedMealPlan);
+      await saveMealPlan(updatedMealPlan, firebaseRepository, userId);
       setMealPlan(updatedMealPlan);
     } catch (error) {
-      if (__DEV__) {
-        //console.error(`Error generating ${mealType} for ${date}:`, error);
-      }
-
-      // Show user-friendly message
-      const userMessage = handleApiError(error);
-      Alert.alert("Recipe Service Error", userMessage);
+      console.error(`Error generating ${mealType} for ${date}:`, error);
+      Alert.alert(
+        "Error",
+        error.message || "Failed to generate meal. Please try again."
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -207,7 +219,6 @@ const MealPlanScreen: React.FC = () => {
 
       const dates = generateDateRange(startDate, numberOfDays);
       const mealTypes = [];
-
       if (mealTimes.breakfast) mealTypes.push("breakfast");
       if (mealTimes.lunch) mealTypes.push("lunch");
       if (mealTimes.dinner) mealTypes.push("dinner");
@@ -217,40 +228,37 @@ const MealPlanScreen: React.FC = () => {
           "No Meals Selected",
           "Please select at least one meal type to generate."
         );
-        setIsGenerating(false);
         return;
       }
 
       const totalMeals = dates.length * mealTypes.length;
       let completedMeals = 0;
-
       const newMealPlan = { ...mealPlan };
 
       for (const date of dates) {
-        if (!newMealPlan[date]) {
-          newMealPlan[date] = {};
-        }
-
+        if (!newMealPlan[date]) newMealPlan[date] = {};
         for (const mealType of mealTypes) {
-          try {
-            const newMeal = await getRandomMeal(mealType, userPreferences);
-            newMealPlan[date][mealType] = newMeal;
-
-            completedMeals++;
-            setLoadingProgress(Math.round((completedMeals / totalMeals) * 100));
-          } catch (error) {
-            console.error(`Error generating ${mealType} for ${date}:`, error);
-          }
+          const newMeal = await getRandomMeal(
+            mealType,
+            userPreferences,
+            spoonacularGateway
+          );
+          newMealPlan[date][mealType] = newMeal;
+          completedMeals++;
+          setLoadingProgress(Math.round((completedMeals / totalMeals) * 100));
         }
       }
 
-      await saveMealPlan(newMealPlan);
+      await saveMealPlan(newMealPlan, firebaseRepository, userId);
       setMealPlan(newMealPlan);
       setIsGenerateModalVisible(false);
       Alert.alert("Success", "Meal plan generated successfully!");
     } catch (error) {
       console.error("Error generating meal plan:", error);
-      Alert.alert("Error", "Failed to generate meal plan. Please try again.");
+      Alert.alert(
+        "Error",
+        error.message || "Failed to generate meal plan. Please try again."
+      );
     } finally {
       setIsGenerating(false);
       setLoadingProgress(0);
@@ -275,66 +283,42 @@ const MealPlanScreen: React.FC = () => {
       }
 
       const dateString = getFormattedDate(selectedPasteDate);
-
       const updatedMealPlan = { ...mealPlan };
-      if (!updatedMealPlan[dateString]) {
-        updatedMealPlan[dateString] = {};
-      }
-
+      if (!updatedMealPlan[dateString]) updatedMealPlan[dateString] = {};
       updatedMealPlan[dateString][selectedPasteMealTime] = { ...copiedMeal };
-
-      await saveMealPlan(updatedMealPlan);
+      await saveMealPlan(updatedMealPlan, firebaseRepository, userId);
       setMealPlan(updatedMealPlan);
-
       setIsPasteModalVisible(false);
       Alert.alert("Success", "Meal pasted successfully!");
     } catch (error) {
       console.error("Error pasting meal:", error);
-      Alert.alert("Error", "Failed to paste meal");
+      Alert.alert("Error", error.message || "Failed to paste meal");
     }
   };
 
   const handleAddSingleIngredient = async (ingredient: string) => {
     try {
-      const user = auth.currentUser;
-      if (user) {
-        const newItem = { name: ingredient, checked: false };
-
-        // Get the latest shopping list data first
-        const snapshot = await firestore
-          .collection("shoppingLists")
-          .doc(user.uid)
-          .get();
-
-        let currentList: ShoppingListItem[] = [];
-        if (snapshot.exists) {
-          currentList = snapshot.data()?.items || [];
-        }
-
-        // Check if item already exists
-        if (currentList.some((item) => item.name === ingredient)) {
-          Alert.alert(
-            "Info",
-            "This ingredient is already in your shopping list."
-          );
-          return;
-        }
-
-        // Add the new item
-        const updatedList = [...currentList, newItem];
-
-        await firestore
-          .collection("shoppingLists")
-          .doc(user.uid)
-          .set({ items: updatedList });
-
-        // Update local state
-        setShoppingList(updatedList);
-        Alert.alert("Success", `Added "${ingredient}" to shopping list!`);
+      const newItem = { name: ingredient, checked: false };
+      const currentList =
+        (await firebaseRepository.getShoppingList(userId)) || [];
+      if (currentList.some((item) => item.name === ingredient)) {
+        Alert.alert(
+          "Info",
+          "This ingredient is already in your shopping list."
+        );
+        return;
       }
+
+      const updatedList = [...currentList, newItem];
+      await firebaseRepository.saveShoppingList(userId, updatedList);
+      setShoppingList(updatedList);
+      Alert.alert("Success", `Added "${ingredient}" to shopping list!`);
     } catch (error) {
       console.error("Error adding to shopping list:", error);
-      Alert.alert("Error", "Failed to add item to shopping list");
+      Alert.alert(
+        "Error",
+        error.message || "Failed to add item to shopping list"
+      );
     }
   };
 
@@ -343,55 +327,37 @@ const MealPlanScreen: React.FC = () => {
     setIsIngredientsModalVisible(true);
   };
 
-  const handleAddToShoppingList = async (ingredients: string[]) => {
+  const handleAddToShoppingList = async (
+    ingredients: ShoppingItem[]
+  ): Promise<void> => {
     try {
-      const user = auth.currentUser;
-      if (user) {
-        // Get the latest shopping list data first
-        const snapshot = await firestore
-          .collection("shoppingLists")
-          .doc(user.uid)
-          .get();
-
-        let currentList: ShoppingListItem[] = [];
-        if (snapshot.exists) {
-          currentList = snapshot.data()?.items || [];
-        }
-
-        // Prepare new items, avoiding duplicates
-        const newItems = ingredients
-          .filter(
-            (ingredient) =>
-              !currentList.some((item) => item.name === ingredient)
-          )
-          .map((name) => ({ name, checked: false }));
-
-        if (newItems.length === 0) {
-          Alert.alert(
-            "Info",
-            "All these ingredients are already in your shopping list."
-          );
-          return;
-        }
-
-        //Add the new items
-        const updatedList = [...currentList, ...newItems];
-
-        await firestore
-          .collection("shoppingLists")
-          .doc(user.uid)
-          .set({ items: updatedList });
-
-        // Update local state
-        setShoppingList(updatedList);
+      const currentList =
+        (await firebaseRepository.getShoppingList(userId)) || [];
+      const newItems = ingredients.filter(
+        (ingredient) =>
+          !currentList.some((item) => item.name === ingredient.name)
+      );
+      if (newItems.length === 0) {
         Alert.alert(
-          "Success",
-          `Added ${newItems.length} items to shopping list!`
+          "Info",
+          "All these ingredients are already in your shopping list."
         );
+        return;
       }
-    } catch (error) {
+      const updatedList = [...currentList, ...newItems];
+      await firebaseRepository.saveShoppingList(userId, updatedList);
+      setShoppingList(updatedList);
+      Alert.alert(
+        "Success",
+        `Added ${newItems.length} items to shopping list!`
+      );
+    } catch (error: unknown) {
       console.error("Error adding to shopping list:", error);
-      Alert.alert("Error", "Failed to add items to shopping list");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to add items to shopping list";
+      Alert.alert("Error", message);
     }
   };
 
@@ -403,21 +369,17 @@ const MealPlanScreen: React.FC = () => {
   const handleDeleteMeal = async (date: string, mealType: string) => {
     try {
       const updatedMealPlan = { ...mealPlan };
-
       if (updatedMealPlan[date] && updatedMealPlan[date][mealType]) {
         delete updatedMealPlan[date][mealType];
-
-        // Remove date if empty
         if (Object.keys(updatedMealPlan[date]).length === 0) {
           delete updatedMealPlan[date];
         }
-
-        await saveMealPlan(updatedMealPlan);
+        await saveMealPlan(updatedMealPlan, firebaseRepository, userId);
         setMealPlan(updatedMealPlan);
       }
     } catch (error) {
       console.error("Error deleting meal:", error);
-      Alert.alert("Error", "Failed to delete meal");
+      Alert.alert("Error", error.message || "Failed to delete meal");
     }
   };
 
@@ -426,73 +388,58 @@ const MealPlanScreen: React.FC = () => {
       Alert.alert("Error", "Please enter a template name");
       return;
     }
-
     try {
-      await createMealPlanTemplate(mealPlan, templateName);
+      await createMealPlanTemplate(
+        mealPlan,
+        templateName,
+        firebaseRepository,
+        userId
+      );
       setShowSaveTemplateModal(false);
       setTemplateName("");
       Alert.alert("Success", "Meal plan template saved!");
     } catch (error) {
       console.error("Error saving template:", error);
-      Alert.alert("Error", "Failed to save template");
+      Alert.alert("Error", error.message || "Failed to save template");
     }
   };
 
-  const handleGenerateShoppingList = async () => {
+  const handleGenerateShoppingList = async (): Promise<void> => {
     try {
       const ingredients = await generateShoppingListFromMealPlan(mealPlan);
       await handleAddToShoppingList(ingredients);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error generating shopping list:", error);
-      Alert.alert("Error", "Failed to generate shopping list");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to generate shopping list";
+      Alert.alert("Error", message);
     }
   };
 
   // Generate dates for display
-  const dates = generateDateRange(startDate, 7); // Show one week by default in the UI
+  const dates = generateDateRange(startDate, 7);
 
   // Calculate daily nutritional totals for selected date
   const calculateDailyTotals = () => {
     const dayPlan = mealPlan[selectedDate] || {};
-    let calories = 0;
-    let protein = 0;
-    let carbs = 0;
-    let fat = 0;
-
-    if (dayPlan.breakfast) {
-      calories += dayPlan.breakfast.calories || 0;
-      protein += dayPlan.breakfast.protein || 0;
-      carbs += dayPlan.breakfast.carbs || 0;
-      fat += dayPlan.breakfast.fat || 0;
-    }
-
-    if (dayPlan.lunch) {
-      calories += dayPlan.lunch.calories || 0;
-      protein += dayPlan.lunch.protein || 0;
-      carbs += dayPlan.lunch.carbs || 0;
-      fat += dayPlan.lunch.fat || 0;
-    }
-
-    if (dayPlan.dinner) {
-      calories += dayPlan.dinner.calories || 0;
-      protein += dayPlan.dinner.protein || 0;
-      carbs += dayPlan.dinner.carbs || 0;
-      fat += dayPlan.dinner.fat || 0;
-    }
-
+    let calories = 0,
+      protein = 0,
+      carbs = 0,
+      fat = 0;
+    ["breakfast", "lunch", "dinner"].forEach((mealType) => {
+      if (dayPlan[mealType]) {
+        calories += dayPlan[mealType].calories || 0;
+        protein += dayPlan[mealType].protein || 0;
+        carbs += dayPlan[mealType].carbs || 0;
+        fat += dayPlan[mealType].fat || 0;
+      }
+    });
     return { calories, protein, carbs, fat };
   };
 
   const dailyTotals = calculateDailyTotals();
-
-  // Format days for display
-  const formatDayButtonLabel = (dateString: string) => {
-    const date = new Date(dateString);
-    return {
-      day: date.toLocaleDateString(undefined, { weekday: "short" }),
-      date: `${date.getMonth() + 1}/${date.getDate()}`,
-    };
-  };
 
   return (
     <View style={styles.container}>
@@ -507,37 +454,37 @@ const MealPlanScreen: React.FC = () => {
         showsHorizontalScrollIndicator={false}
         style={styles.daysContainer}
       >
-        {dates.map((date) => {
-          const dateObj = new Date(date);
-          return (
-            <TouchableOpacity
-              key={date}
+        {dates.map((date) => (
+          <TouchableOpacity
+            key={date}
+            style={[
+              styles.dayButton,
+              selectedDate === date && styles.selectedDay,
+            ]}
+            onPress={() => setSelectedDate(date)}
+          >
+            <Text
               style={[
-                styles.dayButton,
-                selectedDate === date && styles.selectedDay,
+                styles.dayText,
+                selectedDate === date && styles.selectedDayText,
               ]}
-              onPress={() => setSelectedDate(date)}
             >
-              <Text
-                style={[
-                  styles.dayText,
-                  selectedDate === date && styles.selectedDayText,
-                ]}
-              >
-                {dateObj.toLocaleDateString(undefined, { weekday: "short" })}
-              </Text>
-              <Text
-                style={[
-                  styles.dateText,
-                  selectedDate === date && styles.selectedDayText,
-                ]}
-              >
-                {`${dateObj.getMonth() + 1}/${dateObj.getDate()}`}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+              {new Date(date).toLocaleDateString(undefined, {
+                weekday: "short",
+              })}
+            </Text>
+            <Text
+              style={[
+                styles.dateText,
+                selectedDate === date && styles.selectedDayText,
+              ]}
+            >
+              {`${new Date(date).getMonth() + 1}/${new Date(date).getDate()}`}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </ScrollView>
+
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Daily nutritional summary */}
         <View style={styles.nutritionContainer}>
@@ -602,9 +549,7 @@ const MealPlanScreen: React.FC = () => {
               handleShowPrepInstructions(mealPlan[selectedDate].lunch)
             }
             onDelete={() => handleDeleteMeal(selectedDate, "lunch")}
-            onCopy={() =>
-              handleCopyMeal(mealPlan[selectedDate].breakfast, "breakfast")
-            }
+            onCopy={() => handleCopyMeal(mealPlan[selectedDate].lunch, "lunch")}
           />
         ) : (
           <Button
@@ -632,7 +577,7 @@ const MealPlanScreen: React.FC = () => {
             }
             onDelete={() => handleDeleteMeal(selectedDate, "dinner")}
             onCopy={() =>
-              handleCopyMeal(mealPlan[selectedDate].breakfast, "breakfast")
+              handleCopyMeal(mealPlan[selectedDate].dinner, "dinner")
             }
           />
         ) : (
@@ -657,8 +602,25 @@ const MealPlanScreen: React.FC = () => {
           >
             Generate Meal Plan
           </Button>
+          <Button
+            mode="outlined"
+            onPress={handleGenerateShoppingList}
+            style={styles.generateButton}
+            icon="cart"
+          >
+            Generate Shopping List
+          </Button>
+          <Button
+            mode="outlined"
+            onPress={() => setShowSaveTemplateModal(true)}
+            style={styles.generateButton}
+            icon="content-save"
+          >
+            Save as Template
+          </Button>
         </View>
       </ScrollView>
+
       {/* Modals */}
       <PasteMealModal
         visible={isPasteModalVisible}
@@ -670,6 +632,7 @@ const MealPlanScreen: React.FC = () => {
         onPaste={handlePasteMeal}
         mealTimes={mealTimes}
       />
+
       {/* Generate Meal Plan Modal */}
       <Portal>
         <Modal
@@ -678,14 +641,12 @@ const MealPlanScreen: React.FC = () => {
           contentContainerStyle={styles.modalContainer}
         >
           <Title style={styles.modalTitle}>Generate Meal Plan</Title>
-
           <Text style={styles.sectionLabel}>Start Date</Text>
           <TouchableOpacity style={styles.datePickerButton} onPress={() => {}}>
             <Text style={styles.datePickerButtonText}>
               {startDate.toISOString().split("T")[0]}
             </Text>
           </TouchableOpacity>
-
           <Text style={styles.sectionLabel}>Number of Days</Text>
           <View style={styles.daysInputContainer}>
             <TouchableOpacity
@@ -694,20 +655,16 @@ const MealPlanScreen: React.FC = () => {
             >
               <Text style={styles.dayText}>-</Text>
             </TouchableOpacity>
-
             <TextInput
               style={styles.daysInput}
               value={numberOfDays.toString()}
               onChangeText={(text) => {
                 const num = parseInt(text);
-                if (!isNaN(num) && num > 0) {
-                  setNumberOfDays(num);
-                }
+                if (!isNaN(num) && num > 0) setNumberOfDays(num);
               }}
               keyboardType="numeric"
               mode="outlined"
             />
-
             <TouchableOpacity
               style={styles.dayButton}
               onPress={() => setNumberOfDays(numberOfDays + 1)}
@@ -715,32 +672,28 @@ const MealPlanScreen: React.FC = () => {
               <Text style={styles.dayText}>+</Text>
             </TouchableOpacity>
           </View>
-
           <Text style={styles.sectionLabel}>Meal Periods</Text>
-          <View>
-            <Checkbox.Item
-              label="Breakfast"
-              status={mealTimes.breakfast ? "checked" : "unchecked"}
-              onPress={() =>
-                setMealTimes({ ...mealTimes, breakfast: !mealTimes.breakfast })
-              }
-            />
-            <Checkbox.Item
-              label="Lunch"
-              status={mealTimes.lunch ? "checked" : "unchecked"}
-              onPress={() =>
-                setMealTimes({ ...mealTimes, lunch: !mealTimes.lunch })
-              }
-            />
-            <Checkbox.Item
-              label="Dinner"
-              status={mealTimes.dinner ? "checked" : "unchecked"}
-              onPress={() =>
-                setMealTimes({ ...mealTimes, dinner: !mealTimes.dinner })
-              }
-            />
-          </View>
-
+          <Checkbox.Item
+            label="Breakfast"
+            status={mealTimes.breakfast ? "checked" : "unchecked"}
+            onPress={() =>
+              setMealTimes({ ...mealTimes, breakfast: !mealTimes.breakfast })
+            }
+          />
+          <Checkbox.Item
+            label="Lunch"
+            status={mealTimes.lunch ? "checked" : "unchecked"}
+            onPress={() =>
+              setMealTimes({ ...mealTimes, lunch: !mealTimes.lunch })
+            }
+          />
+          <Checkbox.Item
+            label="Dinner"
+            status={mealTimes.dinner ? "checked" : "unchecked"}
+            onPress={() =>
+              setMealTimes({ ...mealTimes, dinner: !mealTimes.dinner })
+            }
+          />
           <View style={styles.modalButtonContainer}>
             <Button
               mode="contained"
@@ -759,7 +712,6 @@ const MealPlanScreen: React.FC = () => {
               Cancel
             </Button>
           </View>
-
           {isGenerating && (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color="#6200ea" />
@@ -770,6 +722,7 @@ const MealPlanScreen: React.FC = () => {
           )}
         </Modal>
       </Portal>
+
       {/* Ingredients Modal */}
       <Portal>
         <Modal
@@ -786,7 +739,6 @@ const MealPlanScreen: React.FC = () => {
               style={styles.closeIcon}
             />
           </View>
-
           <ScrollView style={styles.ingredientsList}>
             {selectedIngredients.map((ingredient, index) => (
               <View key={index} style={styles.ingredientItem}>
@@ -801,10 +753,13 @@ const MealPlanScreen: React.FC = () => {
               </View>
             ))}
           </ScrollView>
-
           <Button
             mode="contained"
-            onPress={() => handleAddToShoppingList(selectedIngredients)}
+            onPress={() =>
+              handleAddToShoppingList(
+                selectedIngredients.map((name) => ({ name, checked: false }))
+              )
+            }
             style={styles.fullWidthButton}
             icon="cart-plus"
           >
@@ -812,6 +767,7 @@ const MealPlanScreen: React.FC = () => {
           </Button>
         </Modal>
       </Portal>
+
       {/* Prep Instructions Modal */}
       <Portal>
         <Modal
@@ -856,6 +812,7 @@ const MealPlanScreen: React.FC = () => {
           )}
         </Modal>
       </Portal>
+
       {/* Save Template Modal */}
       <Portal>
         <Modal
