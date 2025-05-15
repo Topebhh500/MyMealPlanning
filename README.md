@@ -36,6 +36,7 @@ This project, developed as part of a Bachelor of Business Information Technology
      ```
      FIREBASE_API_KEY=your_firebase_api_key
      SPOONACULAR_API_KEY=your_spoonacular_api_key
+     GOOGLE_PLACES_API_KEY=your_google_place_api_key
      ```
 4. **Run the App**:
    ```bash
